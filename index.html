@@ -139,6 +139,7 @@ button, input, select { font-family: inherit; }
   padding: 0 8px 22px;
   font-size: 20px;
   font-weight: 800;
+  cursor: pointer;
 }
 .sidebar-brand .brand-icon {
   color: var(--primary);
@@ -149,7 +150,7 @@ button, input, select { font-family: inherit; }
   border-radius: 9px;
 }
 .sidebar-brand .brand-icon svg { width: 18px; height: 18px; }
-.mobile-brand { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 16px; }
+.mobile-brand { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 16px; cursor: pointer; }
 .mobile-brand .brand-icon { color: var(--primary); }
 .mobile-brand .brand-icon .icon { width: 19px; height: 19px; vertical-align: -4px; }
 
@@ -663,20 +664,25 @@ body:not(.light) .stale-badge { color: #ffcb7d; }
   margin-inline-end: 6px; color: var(--text-dim); vertical-align: -3px;
 }
 
-/* Quick-start onboarding checklist (Dashboard) */
-.quick-start-card { margin-bottom: 20px; }
-.quick-start-list { display: flex; flex-direction: column; gap: 6px; }
-.quick-start-item {
-  display: flex; align-items: center; gap: 10px;
-  background: none; border: none; width: 100%; text-align: right;
-  padding: 8px 6px; border-radius: 8px; cursor: pointer;
-  color: var(--text); font-size: 13.5px; font-family: inherit;
-  transition: background .15s;
+/* Manual "actual balance" check-in card (Dashboard) */
+.balance-checkin-card { margin-bottom: 20px; }
+.balance-checkin-form { display: flex; gap: 10px; margin: 14px 0 8px; }
+.balance-checkin-form input { flex: 1; }
+.balance-checkin-history { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.balance-checkin-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 4px; border-bottom: 1px solid var(--border); font-size: 13px;
 }
-.quick-start-item:hover { background: var(--bg-hover); }
-.quick-start-item .icon { color: var(--text-faint); flex-shrink: 0; }
-.quick-start-item.done { color: var(--text-dim); text-decoration: line-through; }
-.quick-start-item.done .icon { color: var(--status-good); }
+.balance-checkin-row span:first-child { color: var(--text-dim); min-width: 90px; }
+.balance-checkin-row span:nth-child(2) { flex: 1; font-weight: 600; }
+.balance-checkin-row button {
+  background: none; border: none; cursor: pointer; color: var(--text-faint);
+  width: 26px; height: 26px; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center;
+}
+.balance-checkin-row button:hover { background: var(--bg-hover); color: var(--expense); }
+@media (max-width: 480px) {
+  .balance-checkin-form { flex-direction: column; }
+}
 
 /* Repeat-last-transaction chip (Transactions page) */
 .quick-add-chip.repeat-last { border-style: dashed; }
@@ -1090,7 +1096,6 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
   .icon-btn { width: 42px; height: 42px; }
   .quick-add-chip { padding: 10px 10px 10px 14px; }
   .quick-add-remove { width: 22px; height: 22px; }
-  .quick-start-item { padding: 11px 6px; }
 }
 
 </style>
@@ -1116,7 +1121,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar">
-    <div class="sidebar-brand">
+    <div class="sidebar-brand" id="sidebarBrandBtn" role="button" tabindex="0" title="חזרה לדשבורד">
       <span class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18"/><circle cx="17" cy="14.5" r="1.2" fill="currentColor" stroke="none"/></svg></span>
       <span class="brand-name">כספית</span>
     </div>
@@ -1154,7 +1159,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
     <!-- Mobile top bar -->
     <div class="mobile-topbar">
       <button id="mobileMenuBtn" class="icon-btn" data-icon="menu"></button>
-      <span class="brand-name mobile-brand"><span class="brand-icon" data-icon="wallet"></span> כספית</span>
+      <span class="brand-name mobile-brand" id="mobileBrandBtn" role="button" tabindex="0" title="חזרה לדשבורד"><span class="brand-icon" data-icon="wallet"></span> כספית</span>
       <button class="icon-btn" id="mobileAddBtn" data-icon="plus"></button>
     </div>
 
@@ -1186,13 +1191,18 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
     <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
-      <div class="card quick-start-card" id="quickStartCard" hidden>
+      <div class="card balance-checkin-card" id="balanceCheckinCard">
         <div class="card-header">
-          <h3><span data-icon="sparkle" class="icon-xs"></span> התחלה מהירה</h3>
-          <button type="button" class="backup-banner-close" id="quickStartCloseBtn" aria-label="סגירה">✕</button>
+          <h3><span data-icon="wallet" class="icon-xs"></span> כמה כסף יש לי בפועל</h3>
+          <button type="button" class="info-btn" data-tooltip="רישום ידני ופשוט של כמה כסף יש לך באמת (אחרי שסיפרת מזומן או בדקת את חשבון הבנק) — עצמאי מהחישוב האוטומטי שמבוסס על התנועות שרשמת. אפשר לעדכן בכל רגע שבא לך.">?</button>
         </div>
-        <p class="hint">כמה צעדים קצרים כדי שכספית תעבוד בשבילך כמו שצריך:</p>
-        <div id="quickStartList" class="quick-start-list"></div>
+        <div id="balanceCheckinSummary"></div>
+        <div class="balance-checkin-form">
+          <input type="number" id="balanceCheckinAmount" step="1" placeholder="כמה כסף יש לך עכשיו (₪)">
+          <button type="button" class="btn-primary" id="balanceCheckinSaveBtn">שמירה</button>
+        </div>
+        <button type="button" class="btn-link" id="balanceCheckinHistoryToggle">הצג היסטוריה</button>
+        <div id="balanceCheckinHistory" class="balance-checkin-history" hidden></div>
       </div>
 
       <div class="stat-grid">
@@ -1933,7 +1943,8 @@ const DEFAULT_STATE = () => ({
   savingsGoals: [], // {id, name, target, current, targetDate, createdAt}
   accounts: [{ id: DEFAULT_ACCOUNT_ID, name: 'חשבון ראשי' }], // {id, name}
   quickAdds: [], // {id, label, type, category, amount} — one-tap quick-add presets
-  envelopeAdjustments: {} // { [monthKey]: { [categoryName]: adjustmentAmount } } — temporary per-month transfers between budget envelopes
+  envelopeAdjustments: {}, // { [monthKey]: { [categoryName]: adjustmentAmount } } — temporary per-month transfers between budget envelopes
+  balanceCheckins: [] // {id, date, amount} — manual "how much money do I actually have" log entries
 });
 
 let state = DEFAULT_STATE();
@@ -1961,7 +1972,8 @@ function normalizeState(parsed) {
     savingsGoals: parsed.savingsGoals || [],
     accounts,
     quickAdds: parsed.quickAdds || [],
-    envelopeAdjustments: parsed.envelopeAdjustments || {}
+    envelopeAdjustments: parsed.envelopeAdjustments || {},
+    balanceCheckins: parsed.balanceCheckins || []
   };
 }
 
@@ -2469,32 +2481,79 @@ function txInMonth(key) {
   return list.filter(t => monthKey(t.date) === key);
 }
 
-const QUICKSTART_DISMISS_KEY = 'kaspit_quickstart_dismissed';
+/* ---------------- Manual "actual balance" check-ins ----------------
+   A simple, independent way to jot down how much money you actually have (after
+   counting cash or checking the bank) whenever you feel like it — separate from the
+   automatic total calculated from logged transactions, which can drift if not every
+   transaction gets recorded. */
 
-function renderQuickStartCard() {
-  const card = document.getElementById('quickStartCard');
-  if (!card) return;
-  if (localStorage.getItem(QUICKSTART_DISMISS_KEY)) { card.hidden = true; return; }
+function renderBalanceCheckinCard() {
+  const summaryEl = document.getElementById('balanceCheckinSummary');
+  if (!summaryEl) return;
+  const checkins = state.balanceCheckins || [];
+  if (checkins.length === 0) {
+    summaryEl.innerHTML = '<p class="hint">עדיין לא רשמת כמה כסף יש לך בפועל. תספור ותרשום כל פעם שתרצה — זה נפרד לגמרי מהתנועות שאתה מזין.</p>';
+    return;
+  }
+  const sorted = [...checkins].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const latest = sorted[0];
+  const daysAgo = Math.floor(daysSince(latest.date));
+  const whenText = daysAgo <= 0 ? 'היום' : daysAgo === 1 ? 'אתמול' : `לפני ${daysAgo} ימים`;
 
-  const steps = [
-    { done: state.transactions.length > 0, label: 'הוסף את התנועה הראשונה שלך', goto: 'transactions' },
-    { done: Object.keys(state.budgets).length > 0, label: 'הגדר תקציב לפחות לקטגוריית הוצאה אחת', goto: 'budget' },
-    { done: state.quickAdds.length > 0, label: 'הגדר הוצאה מהירה אחת להוצאות שחוזרות (כמו דלק)', goto: 'transactions' },
-    { done: state.savingsGoals.length > 0, label: 'הגדר יעד חיסכון אישי', goto: 'budget' }
-  ];
+  const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  const diff = Number(latest.amount) - totalAll;
+  const diffHint = Math.abs(diff) >= 1
+    ? `<div class="hint">לפי התנועות שרשמת, היתרה המחושבת היא ${formatCurrency(totalAll)} — הפרש של ${formatCurrency(Math.abs(diff))} ${diff > 0 ? 'יותר ממה שרשמת בתנועות' : 'פחות ממה שרשמת בתנועות'}.</div>`
+    : `<div class="hint">זה תואם בדיוק ליתרה המחושבת מהתנועות שלך.</div>`;
 
-  if (steps.every(s => s.done)) { card.hidden = true; return; }
+  summaryEl.innerHTML = `
+    <div class="insight-kpi good">${formatCurrency(latest.amount)}</div>
+    <div class="hint">מה שספרת ${whenText} (${formatDateDisplay(latest.date)})</div>
+    ${diffHint}`;
+}
 
-  card.hidden = false;
-  document.getElementById('quickStartList').innerHTML = steps.map(s => `
-    <button type="button" class="quick-start-item ${s.done ? 'done' : ''}" data-goto="${s.goto}">
-      ${icon(s.done ? 'checkCircle' : 'circleEmpty', 'icon-xs')}
-      <span>${s.label}</span>
-    </button>`).join('');
+function renderBalanceCheckinHistory() {
+  const el = document.getElementById('balanceCheckinHistory');
+  if (!el) return;
+  const checkins = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  if (checkins.length === 0) {
+    el.innerHTML = '<p class="hint">אין עדיין רישומים.</p>';
+    return;
+  }
+  el.innerHTML = checkins.map(c => `
+    <div class="balance-checkin-row">
+      <span>${formatDateDisplay(c.date)}</span>
+      <span>${formatCurrency(c.amount)}</span>
+      <button type="button" title="מחיקה" onclick="deleteBalanceCheckin('${c.id}')">${icon('trash', 'icon-xs')}</button>
+    </div>`).join('');
+}
+
+function addBalanceCheckin(amount) {
+  if (isNaN(amount)) { toast('נא להזין סכום תקין'); return; }
+  state.balanceCheckins.push({ id: uid(), date: todayISO(), amount });
+  saveState();
+  renderBalanceCheckinCard();
+  renderBalanceCheckinHistory();
+  toast('נשמר!');
+}
+
+function deleteBalanceCheckin(id) {
+  const idx = state.balanceCheckins.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  const [removed] = state.balanceCheckins.splice(idx, 1);
+  saveState();
+  renderBalanceCheckinCard();
+  renderBalanceCheckinHistory();
+  showUndoToast('הרישום נמחק', () => {
+    state.balanceCheckins.splice(idx, 0, removed);
+    saveState();
+    renderBalanceCheckinCard();
+    renderBalanceCheckinHistory();
+  });
 }
 
 function renderDashboard() {
-  renderQuickStartCard();
+  renderBalanceCheckinCard();
   const key = selectedMonthKey();
   const monthTx = txInMonth(key);
   const income = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
@@ -4595,7 +4654,8 @@ function handleJsonImport(file) {
         savingsGoals: parsed.savingsGoals || [],
         accounts: importedAccounts,
         quickAdds: parsed.quickAdds || [],
-        envelopeAdjustments: parsed.envelopeAdjustments || {}
+        envelopeAdjustments: parsed.envelopeAdjustments || {},
+        balanceCheckins: parsed.balanceCheckins || []
       };
       saveState();
       renderAll();
@@ -4856,13 +4916,22 @@ function initEvents() {
     document.getElementById('budgetAlertBanner').classList.remove('show');
   });
 
-  document.getElementById('quickStartCloseBtn').addEventListener('click', () => {
-    localStorage.setItem(QUICKSTART_DISMISS_KEY, '1');
-    document.getElementById('quickStartCard').hidden = true;
+  document.getElementById('sidebarBrandBtn').addEventListener('click', () => goToPage('dashboard'));
+  document.getElementById('mobileBrandBtn').addEventListener('click', () => goToPage('dashboard'));
+
+  document.getElementById('balanceCheckinSaveBtn').addEventListener('click', () => {
+    const input = document.getElementById('balanceCheckinAmount');
+    addBalanceCheckin(parseFloat(input.value));
+    input.value = '';
   });
-  document.getElementById('quickStartList').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-goto]');
-    if (btn) goToPage(btn.dataset.goto);
+  document.getElementById('balanceCheckinAmount').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('balanceCheckinSaveBtn').click(); }
+  });
+  document.getElementById('balanceCheckinHistoryToggle').addEventListener('click', () => {
+    const el = document.getElementById('balanceCheckinHistory');
+    el.hidden = !el.hidden;
+    if (!el.hidden) renderBalanceCheckinHistory();
+    document.getElementById('balanceCheckinHistoryToggle').textContent = el.hidden ? 'הצג היסטוריה' : 'הסתר היסטוריה';
   });
 
   document.getElementById('whatsNewGotItBtn').addEventListener('click', () => {
