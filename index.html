@@ -227,7 +227,7 @@ button, input, select { font-family: inherit; }
 
 .topbar-actions { display: flex; gap: 10px; align-items: center; }
 
-.select-month, select, input[type=text], input[type=number], input[type=date], input[type=file] {
+.select-month, select, input[type=text], input[type=number], input[type=date], input[type=file], input[type=password] {
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text);
@@ -682,6 +682,81 @@ body:not(.light) .stale-badge { color: #ffcb7d; }
 .balance-checkin-row button:hover { background: var(--bg-hover); color: var(--expense); }
 @media (max-width: 480px) {
   .balance-checkin-form { flex-direction: column; }
+}
+
+/* AI assistant (Gemini) page */
+.assistant-privacy-note {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13px; line-height: 1.6; color: var(--text-dim);
+}
+.assistant-privacy-note .icon-xs { margin-top: 3px; color: var(--primary); flex-shrink: 0; }
+
+.assistant-setup-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 8px; }
+.assistant-setup-row input { flex: 1; min-width: 160px; }
+
+.assistant-header-actions { display: flex; gap: 14px; align-items: center; }
+
+.assistant-chat-log {
+  height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;
+  padding: 4px 2px; margin-bottom: 10px;
+}
+.assistant-empty-hint { padding: 20px 4px; }
+
+.assistant-bubble {
+  max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.55;
+  white-space: pre-wrap; word-break: break-word;
+}
+.assistant-bubble.user {
+  align-self: flex-start;
+  background: linear-gradient(135deg, var(--primary), #9b7bff);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.assistant-bubble.model {
+  align-self: flex-end;
+  background: var(--bg-hover);
+  color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.assistant-bubble.model.error { color: var(--expense); }
+.assistant-bubble.loading { color: var(--text-faint); font-style: italic; }
+
+.assistant-tx-chip {
+  margin-top: 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 6px 10px; font-size: 12.5px; color: var(--text);
+}
+.assistant-tx-chip.cancelled { opacity: .55; text-decoration: line-through; }
+.assistant-tx-amount { font-weight: 700; }
+.assistant-tx-amount.income { color: var(--income); }
+.assistant-tx-amount.expense { color: var(--expense); }
+.assistant-tx-cat { color: var(--text-dim); }
+.assistant-tx-date { color: var(--text-faint); }
+.assistant-tx-undo {
+  margin-inline-start: auto; background: none; border: none; color: var(--primary);
+  cursor: pointer; font-size: 12.5px; font-weight: 600; padding: 2px 4px;
+}
+.assistant-tx-undo:hover { text-decoration: underline; }
+.assistant-tx-undo:disabled { color: var(--text-faint); cursor: default; text-decoration: none; }
+
+.assistant-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.assistant-suggestion-chip {
+  background: var(--bg-hover); border: 1px solid var(--border); border-radius: 20px;
+  padding: 7px 14px; font-size: 12.5px; color: var(--text-dim); cursor: pointer;
+}
+.assistant-suggestion-chip:hover { color: var(--primary); border-color: var(--primary); }
+
+.assistant-input-row { display: flex; gap: 10px; }
+.assistant-input-row input { flex: 1; }
+.assistant-input-row button {
+  display: flex; align-items: center; justify-content: center; width: 46px; padding: 0; flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .assistant-setup-row { flex-direction: column; }
+  .assistant-setup-row input, .assistant-setup-row button { width: 100%; }
+  .assistant-chat-log { height: 300px; }
+  .assistant-bubble { max-width: 92%; }
 }
 
 /* Repeat-last-transaction chip (Transactions page) */
@@ -1142,6 +1217,9 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
       <button class="nav-item" data-page="recurring">
         <span class="nav-icon" data-icon="repeat"></span><span class="nav-label">הוראות קבע</span>
       </button>
+      <button class="nav-item" data-page="assistant">
+        <span class="nav-icon" data-icon="bot"></span><span class="nav-label">עוזר AI</span>
+      </button>
       <button class="nav-item" data-page="settings">
         <span class="nav-icon" data-icon="settings"></span><span class="nav-label">הגדרות ונתונים</span>
       </button>
@@ -1461,6 +1539,48 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         </div>
         <p class="hint">תנועות של הוראות קבע נוצרות אוטומטית מדי חודש/שבוע החל מתאריך ההתחלה.</p>
         <div id="recurringList" class="recurring-list"></div>
+      </div>
+    </section>
+
+    <!-- AI ASSISTANT -->
+    <section class="page" id="page-assistant">
+      <div class="card assistant-privacy-note">
+        <span data-icon="lock" class="icon-xs"></span>
+        <span>בשונה משאר האתר, כאן ההודעות שלך ותקציר של הנתונים הפיננסיים שלך (סכומים לפי קטגוריה, תנועות אחרונות, תקציבים) נשלחים לשרתי Google (Gemini) כדי לענות. שאר האתר ממשיך לעבוד לגמרי במכשיר שלך, בלי אינטרנט. המפתח וההיסטוריה נשמרים רק בדפדפן הזה, ולא נכללים בגיבוי ה-JSON.</span>
+      </div>
+
+      <div class="card assistant-setup-card" id="assistantSetupCard">
+        <div class="card-header">
+          <h3><span data-icon="bot" class="icon-xs"></span> חיבור ל-Gemini</h3>
+        </div>
+        <p class="hint">כדי להשתמש בעוזר צריך מפתח API חינמי מ-Google. אפשר לקבל אחד בכתובת <strong dir="ltr">aistudio.google.com/apikey</strong> (התחברות עם חשבון Google, בדרך כלל בלי צורך בכרטיס אשראי לשימוש בסיסי).</p>
+        <div class="assistant-setup-row">
+          <input type="password" id="assistantApiKeyInput" placeholder="מפתח API של Gemini" autocomplete="off">
+          <input type="text" id="assistantModelInput" placeholder="שם מודל (ברירת מחדל: gemini-2.5-flash)" autocomplete="off">
+          <button type="button" class="btn-primary" id="assistantSaveKeyBtn">שמירה</button>
+        </div>
+        <p class="hint" id="assistantKeyStatus"></p>
+        <button type="button" class="btn-link" id="assistantRemoveKeyBtn" hidden>הסרת החיבור ומחיקת המפתח</button>
+      </div>
+
+      <div class="card assistant-chat-card" id="assistantChatCard" hidden>
+        <div class="card-header">
+          <h3><span data-icon="bot" class="icon-xs"></span> עוזר AI</h3>
+          <div class="assistant-header-actions">
+            <button type="button" class="btn-link" id="assistantChangeKeyBtn">שינוי מפתח/מודל</button>
+            <button type="button" class="btn-link" id="assistantClearChatBtn">ניקוי שיחה</button>
+          </div>
+        </div>
+        <div class="assistant-chat-log" id="assistantChatLog"></div>
+        <div class="assistant-suggestions" id="assistantSuggestions">
+          <button type="button" class="assistant-suggestion-chip" data-text="כמה הוצאתי החודש?">כמה הוצאתי החודש?</button>
+          <button type="button" class="assistant-suggestion-chip" data-text="קניתי חלב ולחם ב-25 שקל">קניתי חלב ולחם ב-25 שקל</button>
+          <button type="button" class="assistant-suggestion-chip" data-text="מה היתרה שלי?">מה היתרה שלי?</button>
+        </div>
+        <form id="assistantForm" class="assistant-input-row">
+          <input type="text" id="assistantInput" placeholder="כתוב הודעה... (לדוגמה: קניתי קפה ב-14 שקל)" autocomplete="off">
+          <button type="submit" class="btn-primary" id="assistantSendBtn"><span data-icon="send" class="icon-xs"></span></button>
+        </form>
       </div>
     </section>
 
@@ -1873,6 +1993,14 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 const STORAGE_KEY = 'kaspit_data_v1';
 const THEME_KEY = 'kaspit_theme';
 
+// AI assistant (Gemini) — the key, chosen model and chat history live only in localStorage,
+// separate from `state`/the JSON backup, so they never leave this device or get shared by accident.
+const GEMINI_KEY_STORAGE = 'kaspit_gemini_key';
+const GEMINI_MODEL_STORAGE = 'kaspit_gemini_model';
+const GEMINI_CHAT_STORAGE = 'kaspit_gemini_chat_v1';
+const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
+const GEMINI_CHAT_HISTORY_LIMIT = 30;
+
 /* ---------------- Icon system ----------------
    A small hand-built line/solid icon set (24x24 viewBox), used instead of emoji
    so the UI looks identical and polished across every OS/browser. */
@@ -1903,6 +2031,8 @@ const ICON_SVGS = {
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/><circle cx="12" cy="15" r="1.3" fill="currentColor" stroke="none"/></svg>',
   checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8,12.5 11,15.5 16,9"/></svg>',
   circleEmpty: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/></svg>',
+  bot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4"/><circle cx="12" cy="3" r="1.3" fill="currentColor" stroke="none"/><circle cx="9" cy="13.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="15" cy="13.5" r="1.3" fill="currentColor" stroke="none"/><path d="M9 17h6"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="21" y1="3" x2="10" y2="14"/><polygon points="21,3 14,21 10,14 3,10"/></svg>',
   // Category-kind icons, used to give category names a quick visual anchor in lists.
   food: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v7a2 2 0 0 0 4 0V2"/><path d="M8 9v13"/><path d="M17 2c-2 0-3 2-3 5s1 4 3 4 3-1 3-4-1-5-3-5z"/><path d="M17 11v11"/></svg>',
   car: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l1.5-5A2 2 0 0 1 6.4 6.5h11.2a2 2 0 0 1 1.9 1.5L21 13"/><rect x="2" y="13" width="20" height="5" rx="1.5"/><circle cx="7" cy="18.5" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="18.5" r="1.6" fill="currentColor" stroke="none"/></svg>',
@@ -2427,6 +2557,7 @@ const PAGE_META = {
   insights: ['תובנות', 'תחזיות, השוואות והמלצות חכמות על סמך הנתונים שלך'],
   budget: ['תקציב ויעדים', 'עקוב אחרי הוצאות מול יעד חודשי לכל קטגוריה'],
   recurring: ['הוראות קבע', 'הכנסות והוצאות שחוזרות על עצמן אוטומטית'],
+  assistant: ['עוזר AI', 'תרשום מה הוצאת בשפה חופשית, או תשאל שאלות על הנתונים שלך'],
   settings: ['הגדרות ונתונים', 'ניהול קטגוריות, גיבוי, ייבוא וייצוא']
 };
 
@@ -2459,6 +2590,7 @@ function renderCurrentPage() {
   else if (currentPage === 'insights') renderInsightsPage();
   else if (currentPage === 'budget') renderBudgetPage();
   else if (currentPage === 'recurring') renderRecurringPage();
+  else if (currentPage === 'assistant') renderAssistantPage();
   else if (currentPage === 'settings') renderSettingsPage();
 }
 
@@ -3653,6 +3785,279 @@ function confirmRecurringStillNeeded(id) {
   saveState();
   renderRecurringPage();
   toast(`"${r.name}" סומן כרלוונטי`);
+}
+
+/* ---------------- AI assistant (Gemini) ----------------
+   Optional, opt-in chat that can (a) parse a free-text message like "קניתי חלב ב-8 שקל"
+   into a transaction and add it, or (b) answer a question about the user's data. Unlike the
+   rest of the app, this feature needs the internet and sends data to Google's Gemini API:
+   the message the user types, plus a compact numeric summary of their finances (so questions
+   like "how much did I spend on food this month" can be answered). The API key, chosen model
+   and chat log are kept in localStorage only — never in `state`, so they never end up in a
+   JSON backup file the user might share. */
+
+function getGeminiKey() {
+  try { return localStorage.getItem(GEMINI_KEY_STORAGE) || ''; } catch (e) { return ''; }
+}
+function setGeminiKey(key) {
+  try { localStorage.setItem(GEMINI_KEY_STORAGE, key || ''); } catch (e) {}
+}
+function getGeminiModel() {
+  try { return localStorage.getItem(GEMINI_MODEL_STORAGE) || GEMINI_DEFAULT_MODEL; } catch (e) { return GEMINI_DEFAULT_MODEL; }
+}
+function setGeminiModel(model) {
+  try { localStorage.setItem(GEMINI_MODEL_STORAGE, (model || '').trim() || GEMINI_DEFAULT_MODEL); } catch (e) {}
+}
+function loadAssistantChat() {
+  try { return JSON.parse(localStorage.getItem(GEMINI_CHAT_STORAGE) || '[]'); } catch (e) { return []; }
+}
+function saveAssistantChat(messages) {
+  try { localStorage.setItem(GEMINI_CHAT_STORAGE, JSON.stringify(messages.slice(-GEMINI_CHAT_HISTORY_LIMIT))); } catch (e) {}
+}
+
+function renderAssistantPage() {
+  const hasKey = !!getGeminiKey();
+  const setupCard = document.getElementById('assistantSetupCard');
+  const chatCard = document.getElementById('assistantChatCard');
+  const removeBtn = document.getElementById('assistantRemoveKeyBtn');
+  if (hasKey) {
+    setupCard.hidden = true;
+    chatCard.hidden = false;
+    renderAssistantChatLog();
+  } else {
+    setupCard.hidden = false;
+    chatCard.hidden = true;
+    document.getElementById('assistantModelInput').value = getGeminiModel();
+    if (removeBtn) removeBtn.hidden = true;
+  }
+}
+
+function openAssistantSetup() {
+  document.getElementById('assistantSetupCard').hidden = false;
+  document.getElementById('assistantChatCard').hidden = true;
+  document.getElementById('assistantApiKeyInput').value = getGeminiKey();
+  document.getElementById('assistantModelInput').value = getGeminiModel();
+  const removeBtn = document.getElementById('assistantRemoveKeyBtn');
+  if (removeBtn) removeBtn.hidden = !getGeminiKey();
+  document.getElementById('assistantApiKeyInput').focus();
+}
+
+function assistantBubbleHtml(m) {
+  const cls = 'assistant-bubble ' + (m.role === 'user' ? 'user' : 'model') + (m.error ? ' error' : '');
+  let txHtml = '';
+  if (m.tx) {
+    const sign = m.tx.type === 'income' ? '+' : '−';
+    txHtml = `
+      <div class="assistant-tx-chip" data-tx-chip="${m.tx.id}">
+        <span class="assistant-tx-amount ${m.tx.type}">${sign}${formatCurrency(m.tx.amount)}</span>
+        <span class="assistant-tx-cat">${escapeHtml(m.tx.category)}</span>
+        <span class="assistant-tx-date">${formatDateDisplay(m.tx.date)}</span>
+        <button type="button" class="assistant-tx-undo" data-undo-tx="${m.tx.id}" onclick="undoAssistantTransaction('${m.tx.id}')">ביטול</button>
+      </div>`;
+  }
+  return `<div class="${cls}">${escapeHtml(m.text || '')}${txHtml}</div>`;
+}
+
+function renderAssistantChatLog() {
+  const log = document.getElementById('assistantChatLog');
+  if (!log) return;
+  const messages = loadAssistantChat();
+  if (messages.length === 0) {
+    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל"), ואני ארשום את זה — או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?").</p>';
+    return;
+  }
+  log.innerHTML = messages.map(assistantBubbleHtml).join('');
+  log.scrollTop = log.scrollHeight;
+}
+
+function undoAssistantTransaction(id) {
+  const idx = state.transactions.findIndex(t => t.id === id);
+  if (idx === -1) { toast('התנועה כבר לא קיימת'); return; }
+  state.transactions.splice(idx, 1);
+  saveState();
+  renderAll();
+  toast('התנועה בוטלה');
+  const btn = document.querySelector(`[data-undo-tx="${id}"]`);
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'בוטל';
+    const chip = btn.closest('.assistant-tx-chip');
+    if (chip) chip.classList.add('cancelled');
+  }
+}
+
+// Numeric summary of the user's data — this, not the raw transaction list, is what lets the
+// assistant answer questions. Kept compact (recent months + a short recent-transactions list)
+// since it's sent to Google on every message once a key is connected.
+function buildAssistantContext() {
+  const r2 = n => Math.round(Number(n) * 100) / 100;
+  const monthsBack = 6;
+  const now = new Date();
+  const monthlyTotals = [];
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const txs = state.transactions.filter(t => monthKey(t.date) === key);
+    const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const expense = txs.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const expenseByCategory = {};
+    txs.filter(t => t.type === 'expense').forEach(t => {
+      expenseByCategory[t.category] = r2((expenseByCategory[t.category] || 0) + Number(t.amount));
+    });
+    monthlyTotals.push({ month: key, income: r2(income), expense: r2(expense), expenseByCategory });
+  }
+  const totalBalanceFromTransactions = r2(state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0));
+  const recentTransactions = [...state.transactions]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 25)
+    .map(t => ({ date: t.date, type: t.type, category: t.category, amount: r2(t.amount), note: t.note || '' }));
+  const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  return {
+    today: todayISO(),
+    categories: { income: state.categories.income, expense: state.categories.expense },
+    totalBalanceFromTransactions,
+    manualBalanceCheckin: latestCheckin ? { date: latestCheckin.date, amount: r2(latestCheckin.amount) } : null,
+    budgetsMonthly: state.budgets,
+    monthlyTotals,
+    recentTransactions
+  };
+}
+
+function buildAssistantSystemInstruction(context) {
+  return `את/ה עוזר/ת פיננסי/ת בתוך אפליקציית ניהול תקציב אישי בשם "כספית", ותמיד עונה בעברית.
+לכל הודעה מהמשתמש יש בדיוק אחד משלושה מצבים אפשריים:
+1. המשתמש מתאר תנועה כספית (הכנסה או הוצאה) שהוא רוצה לרשום.
+2. המשתמש שואל שאלה על הנתונים הפיננסיים שלו.
+3. חסר מידע קריטי כדי להשלים אחת מהאפשרויות לעיל (בעיקר סכום חסר).
+
+הקשר נתונים עדכני על מצבו הפיננסי של המשתמש (JSON) — אלה כל הנתונים שיש לך, אסור להמציא נתונים שלא מופיעים כאן:
+${JSON.stringify(context)}
+
+עליך להחזיר תמיד ורק אובייקט JSON תקני יחיד, בלי שום טקסט מסביב, בדיוק במבנה הזה:
+{"intent":"add_transaction","transaction":{"type":"income","amount":0,"category":"","note":"","date":"YYYY-MM-DD"},"message":""}
+או:
+{"intent":"answer","transaction":null,"message":""}
+או:
+{"intent":"clarify","transaction":null,"message":""}
+
+כללים:
+- "message" הוא תמיד טקסט קצר, טבעי וידידותי בעברית שיוצג למשתמש כפי שהוא (אישור על מה שנרשם, תשובה לשאלה, או בקשת הבהרה) — לא לחזור בו על מבנה ה-JSON.
+- add_transaction: כש המשתמש מתאר הוצאה/הכנסה חדשה שהוא ביצע. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאה כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך/יום אחר במפורש.
+- clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה לרשום — אל תנחש סכום, בקש אותו בעדינות דרך "message", עם transaction=null.
+- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש, עם transaction=null.
+- לעולם אל תמציא סכומים, תאריכים או נתונים שלא נמצאים בהקשר שסופק.`;
+}
+
+async function callGeminiAssistant(messages) {
+  const apiKey = getGeminiKey();
+  const model = getGeminiModel();
+  const context = buildAssistantContext();
+  const systemInstruction = buildAssistantSystemInstruction(context);
+  const contents = messages.slice(-10).map(m => ({
+    role: m.role === 'user' ? 'user' : 'model',
+    parts: [{ text: m.text }]
+  }));
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }
+    })
+  });
+
+  if (!res.ok) {
+    let msg = `שגיאה מהשרת (קוד ${res.status})`;
+    try {
+      const errJson = await res.json();
+      if (errJson && errJson.error && errJson.error.message) msg += `: ${errJson.error.message}`;
+    } catch (e) { /* ignore */ }
+    if (res.status === 400 || res.status === 403) msg += ' — כדאי לבדוק שהמפתח תקין.';
+    if (res.status === 404) msg += ' — כדאי לבדוק ששם המודל תקין.';
+    throw new Error(msg);
+  }
+
+  const data = await res.json();
+  const text = ((data.candidates || [])[0]?.content?.parts || []).map(p => p.text || '').join('');
+  if (!text) {
+    const blockReason = data.promptFeedback && data.promptFeedback.blockReason;
+    throw new Error(blockReason ? `הבקשה נחסמה על ידי Gemini (${blockReason})` : 'לא התקבלה תשובה מהמודל');
+  }
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    throw new Error('התקבלה תשובה שלא הייתה בפורמט תקין');
+  }
+}
+
+function applyAssistantTransaction(t) {
+  const type = t && t.type === 'income' ? 'income' : 'expense';
+  const amount = Number(t && t.amount);
+  if (!amount || isNaN(amount) || amount <= 0) return { ok: false };
+  let category = ((t && t.category) || '').toString().trim();
+  if (!category) category = type === 'income' ? 'אחר' : 'שונות';
+  if (!state.categories[type].includes(category)) state.categories[type].push(category);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test((t && t.date) || '') ? t.date : todayISO();
+  const note = ((t && t.note) || '').toString().trim();
+  const id = uid();
+  state.transactions.push({ id, type, amount, category, date, note, accountId: DEFAULT_ACCOUNT_ID });
+  saveState();
+  renderAll();
+  return { ok: true, id, type, amount, category, date, note };
+}
+
+async function handleAssistantSend(rawText) {
+  const text = (rawText || '').trim();
+  if (!text) return;
+  if (!getGeminiKey()) { toast('נא לחבר קודם מפתח API'); return; }
+
+  const input = document.getElementById('assistantInput');
+  const sendBtn = document.getElementById('assistantSendBtn');
+  const log = document.getElementById('assistantChatLog');
+
+  let messages = loadAssistantChat();
+  messages.push({ role: 'user', text });
+  saveAssistantChat(messages);
+  renderAssistantChatLog();
+  if (input) input.value = '';
+  if (input) input.disabled = true;
+  if (sendBtn) sendBtn.disabled = true;
+
+  log.insertAdjacentHTML('beforeend', '<div class="assistant-bubble model loading" id="assistantLoadingBubble">חושב…</div>');
+  log.scrollTop = log.scrollHeight;
+
+  try {
+    const result = await callGeminiAssistant(messages);
+    let replyText = (result && result.message) || '';
+    let tx = null;
+    if (result && result.intent === 'add_transaction' && result.transaction) {
+      const applied = applyAssistantTransaction(result.transaction);
+      if (applied.ok) {
+        tx = applied;
+        if (!replyText) replyText = 'נרשם בהצלחה.';
+      } else if (!replyText) {
+        replyText = 'לא הצלחתי לזהות סכום תקין מההודעה — אפשר לנסות שוב עם סכום ברור?';
+      }
+    }
+    if (!replyText) replyText = 'קיבלתי.';
+    messages = loadAssistantChat();
+    messages.push({ role: 'model', text: replyText, tx });
+    saveAssistantChat(messages);
+  } catch (err) {
+    messages = loadAssistantChat();
+    messages.push({ role: 'model', text: `אירעה שגיאה: ${err && err.message ? err.message : err}`, error: true });
+    saveAssistantChat(messages);
+  } finally {
+    const loadingBubble = document.getElementById('assistantLoadingBubble');
+    if (loadingBubble) loadingBubble.remove();
+    renderAssistantChatLog();
+    if (input) { input.disabled = false; input.focus(); }
+    if (sendBtn) sendBtn.disabled = false;
+  }
 }
 
 /* ---------------- Settings page ---------------- */
@@ -4932,6 +5337,41 @@ function initEvents() {
     el.hidden = !el.hidden;
     if (!el.hidden) renderBalanceCheckinHistory();
     document.getElementById('balanceCheckinHistoryToggle').textContent = el.hidden ? 'הצג היסטוריה' : 'הסתר היסטוריה';
+  });
+
+  document.getElementById('assistantSaveKeyBtn').addEventListener('click', () => {
+    const key = document.getElementById('assistantApiKeyInput').value.trim();
+    const model = document.getElementById('assistantModelInput').value.trim();
+    if (!key) { toast('נא להזין מפתח API'); return; }
+    setGeminiKey(key);
+    setGeminiModel(model);
+    renderAssistantPage();
+    toast('המפתח נשמר');
+  });
+  document.getElementById('assistantRemoveKeyBtn').addEventListener('click', () => {
+    setGeminiKey('');
+    document.getElementById('assistantApiKeyInput').value = '';
+    renderAssistantPage();
+    toast('החיבור הוסר');
+  });
+  document.getElementById('assistantChangeKeyBtn').addEventListener('click', openAssistantSetup);
+  document.getElementById('assistantClearChatBtn').addEventListener('click', () => {
+    const prev = loadAssistantChat();
+    if (prev.length === 0) return;
+    saveAssistantChat([]);
+    renderAssistantChatLog();
+    showUndoToast('היסטוריית השיחה נוקתה', () => {
+      saveAssistantChat(prev);
+      renderAssistantChatLog();
+    });
+  });
+  document.getElementById('assistantForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    handleAssistantSend(document.getElementById('assistantInput').value);
+  });
+  document.getElementById('assistantSuggestions').addEventListener('click', (e) => {
+    const chip = e.target.closest('.assistant-suggestion-chip');
+    if (chip) handleAssistantSend(chip.dataset.text);
   });
 
   document.getElementById('whatsNewGotItBtn').addEventListener('click', () => {
