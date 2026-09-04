@@ -739,6 +739,15 @@ body:not(.light) .stale-badge { color: #ffcb7d; }
 .assistant-tx-undo:hover { text-decoration: underline; }
 .assistant-tx-undo:disabled { color: var(--text-faint); cursor: default; text-decoration: none; }
 
+.assistant-tx-chip.added { color: var(--text-dim); }
+.assistant-tx-chip.added .assistant-tx-date { color: var(--income); font-weight: 600; }
+.assistant-tx-confirm {
+  margin-inline-start: auto; background: linear-gradient(135deg, var(--primary), #9b7bff);
+  color: #fff; border: none; border-radius: 8px; padding: 6px 12px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.assistant-tx-confirm:hover { filter: brightness(1.08); }
+
 .assistant-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .assistant-suggestion-chip {
   background: var(--bg-hover); border: 1px solid var(--border); border-radius: 20px;
@@ -1269,20 +1278,6 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
     <!-- DASHBOARD -->
     <section class="page active" id="page-dashboard">
-      <div class="card balance-checkin-card" id="balanceCheckinCard">
-        <div class="card-header">
-          <h3><span data-icon="wallet" class="icon-xs"></span> כמה כסף יש לי בפועל</h3>
-          <button type="button" class="info-btn" data-tooltip="רישום ידני ופשוט של כמה כסף יש לך באמת (אחרי שסיפרת מזומן או בדקת את חשבון הבנק) — עצמאי מהחישוב האוטומטי שמבוסס על התנועות שרשמת. אפשר לעדכן בכל רגע שבא לך.">?</button>
-        </div>
-        <div id="balanceCheckinSummary"></div>
-        <div class="balance-checkin-form">
-          <input type="number" id="balanceCheckinAmount" step="1" placeholder="כמה כסף יש לך עכשיו (₪)">
-          <button type="button" class="btn-primary" id="balanceCheckinSaveBtn">שמירה</button>
-        </div>
-        <button type="button" class="btn-link" id="balanceCheckinHistoryToggle">הצג היסטוריה</button>
-        <div id="balanceCheckinHistory" class="balance-checkin-history" hidden></div>
-      </div>
-
       <div class="stat-grid">
         <div class="stat-card income">
           <div class="stat-icon" data-icon="arrowUp"></div>
@@ -1542,6 +1537,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
       </div>
     </section>
 
+    <!-- ACTUAL BALANCE CHECK-IN -->
     <!-- AI ASSISTANT -->
     <section class="page" id="page-assistant">
       <div class="card assistant-privacy-note">
@@ -1556,7 +1552,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <p class="hint">כדי להשתמש בעוזר צריך מפתח API חינמי מ-Google. אפשר לקבל אחד בכתובת <strong dir="ltr">aistudio.google.com/apikey</strong> (התחברות עם חשבון Google, בדרך כלל בלי צורך בכרטיס אשראי לשימוש בסיסי).</p>
         <div class="assistant-setup-row">
           <input type="password" id="assistantApiKeyInput" placeholder="מפתח API של Gemini" autocomplete="off">
-          <input type="text" id="assistantModelInput" placeholder="שם מודל (ברירת מחדל: gemini-2.5-flash)" autocomplete="off">
+          <input type="text" id="assistantModelInput" placeholder="שם מודל" autocomplete="off">
           <button type="button" class="btn-primary" id="assistantSaveKeyBtn">שמירה</button>
         </div>
         <p class="hint" id="assistantKeyStatus"></p>
@@ -1575,6 +1571,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <div class="assistant-suggestions" id="assistantSuggestions">
           <button type="button" class="assistant-suggestion-chip" data-text="כמה הוצאתי החודש?">כמה הוצאתי החודש?</button>
           <button type="button" class="assistant-suggestion-chip" data-text="קניתי חלב ולחם ב-25 שקל">קניתי חלב ולחם ב-25 שקל</button>
+          <button type="button" class="assistant-suggestion-chip" data-text="יש לי מנוי נטפליקס ב-40 שקל כל חודש">יש לי מנוי נטפליקס ב-40 שקל כל חודש</button>
           <button type="button" class="assistant-suggestion-chip" data-text="מה היתרה שלי?">מה היתרה שלי?</button>
         </div>
         <form id="assistantForm" class="assistant-input-row">
@@ -1586,6 +1583,21 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
     <!-- SETTINGS -->
     <section class="page" id="page-settings">
+
+      <h4 class="settings-section-title">יתרה בפועל</h4>
+      <div class="card balance-checkin-card" id="balanceCheckinCard">
+        <div class="card-header">
+          <h3><span data-icon="wallet" class="icon-xs"></span> כמה כסף יש לי בפועל</h3>
+          <button type="button" class="info-btn" data-tooltip="רישום ידני ופשוט של כמה כסף יש לך באמת (אחרי שסיפרת מזומן או בדקת את חשבון הבנק) — עצמאי מהחישוב האוטומטי שמבוסס על התנועות שרשמת. אפשר לעדכן בכל רגע שבא לך.">?</button>
+        </div>
+        <div id="balanceCheckinSummary"></div>
+        <div class="balance-checkin-form">
+          <input type="number" id="balanceCheckinAmount" step="1" placeholder="כמה כסף יש לך עכשיו (₪)">
+          <button type="button" class="btn-primary" id="balanceCheckinSaveBtn">שמירה</button>
+        </div>
+        <button type="button" class="btn-link" id="balanceCheckinHistoryToggle">הצג היסטוריה</button>
+        <div id="balanceCheckinHistory" class="balance-checkin-history" hidden></div>
+      </div>
 
       <h4 class="settings-section-title">דוחות וגיבוי נתונים</h4>
       <div class="grid-2">
@@ -1998,8 +2010,16 @@ const THEME_KEY = 'kaspit_theme';
 const GEMINI_KEY_STORAGE = 'kaspit_gemini_key';
 const GEMINI_MODEL_STORAGE = 'kaspit_gemini_model';
 const GEMINI_CHAT_STORAGE = 'kaspit_gemini_chat_v1';
-const GEMINI_DEFAULT_MODEL = 'gemini-2.5-flash';
+const GEMINI_DEFAULT_MODEL = 'gemini-3.6-flash';
 const GEMINI_CHAT_HISTORY_LIMIT = 30;
+// Model names Google has since retired — mapped forward so a key saved before a retirement
+// doesn't just silently start failing. Add to this if/when the current default is retired too.
+const GEMINI_RETIRED_MODELS = {
+  'gemini-2.5-flash': 'gemini-3.6-flash',
+  'gemini-2.0-flash': 'gemini-3.6-flash',
+  'gemini-1.5-flash': 'gemini-3.6-flash',
+  'gemini-1.0-pro': 'gemini-3.6-flash'
+};
 
 /* ---------------- Icon system ----------------
    A small hand-built line/solid icon set (24x24 viewBox), used instead of emoji
@@ -2685,7 +2705,6 @@ function deleteBalanceCheckin(id) {
 }
 
 function renderDashboard() {
-  renderBalanceCheckinCard();
   const key = selectedMonthKey();
   const monthTx = txInMonth(key);
   const income = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
@@ -3803,7 +3822,15 @@ function setGeminiKey(key) {
   try { localStorage.setItem(GEMINI_KEY_STORAGE, key || ''); } catch (e) {}
 }
 function getGeminiModel() {
-  try { return localStorage.getItem(GEMINI_MODEL_STORAGE) || GEMINI_DEFAULT_MODEL; } catch (e) { return GEMINI_DEFAULT_MODEL; }
+  try {
+    const stored = localStorage.getItem(GEMINI_MODEL_STORAGE);
+    if (!stored) return GEMINI_DEFAULT_MODEL;
+    // Google periodically retires older Gemini model names. If a previously-saved model
+    // is one we know got retired, transparently fall back to the current default instead
+    // of leaving the user stuck with a dead model name until they notice and fix it by hand.
+    if (GEMINI_RETIRED_MODELS[stored]) return GEMINI_RETIRED_MODELS[stored];
+    return stored;
+  } catch (e) { return GEMINI_DEFAULT_MODEL; }
 }
 function setGeminiModel(model) {
   try { localStorage.setItem(GEMINI_MODEL_STORAGE, (model || '').trim() || GEMINI_DEFAULT_MODEL); } catch (e) {}
@@ -3844,18 +3871,35 @@ function openAssistantSetup() {
 
 function assistantBubbleHtml(m) {
   const cls = 'assistant-bubble ' + (m.role === 'user' ? 'user' : 'model') + (m.error ? ' error' : '');
-  let txHtml = '';
+  let extraHtml = '';
   if (m.tx) {
     const sign = m.tx.type === 'income' ? '+' : '−';
-    txHtml = `
+    extraHtml = `
       <div class="assistant-tx-chip" data-tx-chip="${m.tx.id}">
         <span class="assistant-tx-amount ${m.tx.type}">${sign}${formatCurrency(m.tx.amount)}</span>
         <span class="assistant-tx-cat">${escapeHtml(m.tx.category)}</span>
         <span class="assistant-tx-date">${formatDateDisplay(m.tx.date)}</span>
         <button type="button" class="assistant-tx-undo" data-undo-tx="${m.tx.id}" onclick="undoAssistantTransaction('${m.tx.id}')">ביטול</button>
       </div>`;
+  } else if (m.recurring) {
+    const r = m.recurring;
+    const sign = r.type === 'income' ? '+' : '−';
+    const freqLabel = r.frequency === 'weekly' ? 'שבועי' : 'חודשי';
+    extraHtml = m.recurringAdded
+      ? `
+      <div class="assistant-tx-chip added">
+        <span class="assistant-tx-amount ${r.type}">${sign}${formatCurrency(r.amount)}</span>
+        <span class="assistant-tx-cat">${escapeHtml(r.name)} · ${escapeHtml(r.category)} · ${freqLabel}</span>
+        <span class="assistant-tx-date">נוסף כהוראת קבע ✓</span>
+      </div>`
+      : `
+      <div class="assistant-tx-chip pending" data-recurring-chip="${m.id}">
+        <span class="assistant-tx-amount ${r.type}">${sign}${formatCurrency(r.amount)}</span>
+        <span class="assistant-tx-cat">${escapeHtml(r.name)} · ${escapeHtml(r.category)} · ${freqLabel}</span>
+        <button type="button" class="assistant-tx-confirm" onclick="confirmAssistantRecurring('${m.id}')">הוספה כהוראת קבע</button>
+      </div>`;
   }
-  return `<div class="${cls}">${escapeHtml(m.text || '')}${txHtml}</div>`;
+  return `<div class="${cls}">${escapeHtml(m.text || '')}${extraHtml}</div>`;
 }
 
 function renderAssistantChatLog() {
@@ -3863,11 +3907,38 @@ function renderAssistantChatLog() {
   if (!log) return;
   const messages = loadAssistantChat();
   if (messages.length === 0) {
-    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל"), ואני ארשום את זה — או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?").</p>';
+    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל") ואני ארשום את זה, לתאר משהו קבוע (למשל "יש לי מנוי נטפליקס ב-40 שקל כל חודש") ואציע להוסיף אותו כהוראת קבע, או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?").</p>';
     return;
   }
   log.innerHTML = messages.map(assistantBubbleHtml).join('');
   log.scrollTop = log.scrollHeight;
+}
+
+function confirmAssistantRecurring(msgId) {
+  const messages = loadAssistantChat();
+  const msg = messages.find(m => m.id === msgId);
+  if (!msg || !msg.recurring || msg.recurringAdded) return;
+  const r = msg.recurring;
+  const type = r.type === 'income' ? 'income' : 'expense';
+  const amount = Number(r.amount);
+  if (!amount || isNaN(amount) || amount <= 0) { toast('סכום לא תקין'); return; }
+  let category = (r.category || '').toString().trim();
+  if (!category) category = type === 'income' ? 'אחר' : 'שונות';
+  if (!state.categories[type].includes(category)) state.categories[type].push(category);
+  const frequency = r.frequency === 'weekly' ? 'weekly' : 'monthly';
+  const startDate = /^\d{4}-\d{2}-\d{2}$/.test(r.startDate || '') ? r.startDate : todayISO();
+  const name = (r.name || category).toString().trim();
+  state.recurring.push({
+    id: uid(), active: true, lastGenerated: null,
+    name, type, amount, category, frequency, startDate, accountId: DEFAULT_ACCOUNT_ID
+  });
+  saveState();
+  generateRecurringTransactions();
+  renderAll();
+  msg.recurringAdded = true;
+  saveAssistantChat(messages);
+  renderAssistantChatLog();
+  toast(`"${name}" נוסף כהוראת קבע`);
 }
 
 function undoAssistantTransaction(id) {
@@ -3926,26 +3997,27 @@ function buildAssistantContext() {
 
 function buildAssistantSystemInstruction(context) {
   return `את/ה עוזר/ת פיננסי/ת בתוך אפליקציית ניהול תקציב אישי בשם "כספית", ותמיד עונה בעברית.
-לכל הודעה מהמשתמש יש בדיוק אחד משלושה מצבים אפשריים:
-1. המשתמש מתאר תנועה כספית (הכנסה או הוצאה) שהוא רוצה לרשום.
-2. המשתמש שואל שאלה על הנתונים הפיננסיים שלו.
-3. חסר מידע קריטי כדי להשלים אחת מהאפשרויות לעיל (בעיקר סכום חסר).
+לכל הודעה מהמשתמש יש בדיוק אחד מארבעה מצבים אפשריים:
+1. המשתמש מתאר תנועה כספית חד-פעמית (הכנסה או הוצאה) שהוא רוצה לרשום עכשיו.
+2. המשתמש מתאר משהו **קבוע/חוזר על עצמו** — מנוי, שכר דירה, משכורת חודשית, תשלום קבוע כלשהו — לא תשלום בודד אלא מחויבות שחוזרת כל חודש/שבוע.
+3. המשתמש שואל שאלה על הנתונים הפיננסיים שלו.
+4. חסר מידע קריטי כדי להשלים אחת מהאפשרויות לעיל (בעיקר סכום חסר).
 
 הקשר נתונים עדכני על מצבו הפיננסי של המשתמש (JSON) — אלה כל הנתונים שיש לך, אסור להמציא נתונים שלא מופיעים כאן:
 ${JSON.stringify(context)}
 
-עליך להחזיר תמיד ורק אובייקט JSON תקני יחיד, בלי שום טקסט מסביב, בדיוק במבנה הזה:
-{"intent":"add_transaction","transaction":{"type":"income","amount":0,"category":"","note":"","date":"YYYY-MM-DD"},"message":""}
-או:
-{"intent":"answer","transaction":null,"message":""}
-או:
-{"intent":"clarify","transaction":null,"message":""}
+עליך להחזיר תמיד ורק אובייקט JSON תקני יחיד, בלי שום טקסט מסביב, באחד מארבעת המבנים הבאים בדיוק:
+{"intent":"add_transaction","transaction":{"type":"income","amount":0,"category":"","note":"","date":"YYYY-MM-DD"},"recurring":null,"message":""}
+{"intent":"add_recurring","transaction":null,"recurring":{"name":"","type":"income","amount":0,"category":"","frequency":"monthly","startDate":"YYYY-MM-DD"},"message":""}
+{"intent":"answer","transaction":null,"recurring":null,"message":""}
+{"intent":"clarify","transaction":null,"recurring":null,"message":""}
 
 כללים:
-- "message" הוא תמיד טקסט קצר, טבעי וידידותי בעברית שיוצג למשתמש כפי שהוא (אישור על מה שנרשם, תשובה לשאלה, או בקשת הבהרה) — לא לחזור בו על מבנה ה-JSON.
-- add_transaction: כש המשתמש מתאר הוצאה/הכנסה חדשה שהוא ביצע. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאה כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך/יום אחר במפורש.
-- clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה לרשום — אל תנחש סכום, בקש אותו בעדינות דרך "message", עם transaction=null.
-- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש, עם transaction=null.
+- "message" הוא תמיד טקסט קצר, טבעי וידידותי בעברית שיוצג למשתמש כפי שהוא (אישור, הסבר, תשובה, או בקשת הבהרה) — לעולם לא לחזור בו על מבנה ה-JSON.
+- add_transaction: תנועה חד-פעמית שכבר קרתה או קורית עכשיו. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאת כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך אחר במפורש.
+- add_recurring: כשהמשתמש מתאר משהו שחוזר על עצמו באופן קבוע (מילות מפתח כמו "כל חודש", "כל שבוע", "מנוי", "משכורת חודשית", "קבוע", "שכר דירה"). name הוא שם קצר וברור (למשל "נטפליקס", "שכר דירה", "משכורת"). frequency הוא "monthly" כברירת מחדל, או "weekly" רק אם המשתמש ציין משהו שבועי במפורש. startDate בברירת מחדל הוא today מההקשר. ההבחנה מ-add_transaction: אם המשתמש מתאר תשלום בודד שכבר קרה — add_transaction. אם הוא מתאר מחויבות חוזרת/עתידית שצריכה לחזור על עצמה אוטומטית — add_recurring.
+- clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה — אל תנחש, בקש בעדינות דרך "message".
+- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה/הוראת קבע חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש.
 - לעולם אל תמציא סכומים, תאריכים או נתונים שלא נמצאים בהקשר שסופק.`;
 }
 
@@ -3977,7 +4049,7 @@ async function callGeminiAssistant(messages) {
       if (errJson && errJson.error && errJson.error.message) msg += `: ${errJson.error.message}`;
     } catch (e) { /* ignore */ }
     if (res.status === 400 || res.status === 403) msg += ' — כדאי לבדוק שהמפתח תקין.';
-    if (res.status === 404) msg += ' — כדאי לבדוק ששם המודל תקין.';
+    if (res.status === 404) msg += ' — ייתכן ששם המודל הוצא משימוש. אפשר לעדכן שם מודל חדש דרך "שינוי מפתח/מודל" למעלה (Google לפעמים מציינת בהודעת השגיאה איזה מודל להשתמש בו במקום).';
     throw new Error(msg);
   }
 
@@ -4020,7 +4092,7 @@ async function handleAssistantSend(rawText) {
   const log = document.getElementById('assistantChatLog');
 
   let messages = loadAssistantChat();
-  messages.push({ role: 'user', text });
+  messages.push({ id: uid(), role: 'user', text });
   saveAssistantChat(messages);
   renderAssistantChatLog();
   if (input) input.value = '';
@@ -4034,6 +4106,7 @@ async function handleAssistantSend(rawText) {
     const result = await callGeminiAssistant(messages);
     let replyText = (result && result.message) || '';
     let tx = null;
+    let recurring = null;
     if (result && result.intent === 'add_transaction' && result.transaction) {
       const applied = applyAssistantTransaction(result.transaction);
       if (applied.ok) {
@@ -4042,14 +4115,30 @@ async function handleAssistantSend(rawText) {
       } else if (!replyText) {
         replyText = 'לא הצלחתי לזהות סכום תקין מההודעה — אפשר לנסות שוב עם סכום ברור?';
       }
+    } else if (result && result.intent === 'add_recurring' && result.recurring) {
+      const rr = result.recurring;
+      const amt = Number(rr.amount);
+      if (amt && !isNaN(amt) && amt > 0) {
+        const type = rr.type === 'income' ? 'income' : 'expense';
+        const category = (rr.category || '').toString().trim() || (type === 'income' ? 'אחר' : 'שונות');
+        recurring = {
+          name: (rr.name || category).toString().trim(),
+          type, amount: amt, category,
+          frequency: rr.frequency === 'weekly' ? 'weekly' : 'monthly',
+          startDate: /^\d{4}-\d{2}-\d{2}$/.test(rr.startDate || '') ? rr.startDate : todayISO()
+        };
+        if (!replyText) replyText = 'זיהיתי הוראת קבע — אפשר ללחוץ על הכפתור למטה כדי להוסיף אותה בפועל.';
+      } else if (!replyText) {
+        replyText = 'לא הצלחתי לזהות סכום תקין להוראת הקבע — אפשר לפרט שוב עם סכום ברור?';
+      }
     }
     if (!replyText) replyText = 'קיבלתי.';
     messages = loadAssistantChat();
-    messages.push({ role: 'model', text: replyText, tx });
+    messages.push({ id: uid(), role: 'model', text: replyText, tx, recurring });
     saveAssistantChat(messages);
   } catch (err) {
     messages = loadAssistantChat();
-    messages.push({ role: 'model', text: `אירעה שגיאה: ${err && err.message ? err.message : err}`, error: true });
+    messages.push({ id: uid(), role: 'model', text: `אירעה שגיאה: ${err && err.message ? err.message : err}`, error: true });
     saveAssistantChat(messages);
   } finally {
     const loadingBubble = document.getElementById('assistantLoadingBubble');
@@ -4063,6 +4152,7 @@ async function handleAssistantSend(rawText) {
 /* ---------------- Settings page ---------------- */
 
 function renderSettingsPage() {
+  renderBalanceCheckinCard();
   renderCatList('income');
   renderCatList('expense');
   renderAccountsList();
