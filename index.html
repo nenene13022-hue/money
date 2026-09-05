@@ -259,6 +259,8 @@ button:focus-visible, .nav-item:focus-visible, .type-btn:focus-visible, .toggle-
 }
 .btn-primary:hover { filter: brightness(1.08); box-shadow: 0 6px 18px rgba(108,123,255,0.42); }
 .btn-primary:active { transform: scale(.97); }
+.btn-primary:disabled { opacity: .55; cursor: not-allowed; filter: none; box-shadow: none; }
+#assistantSendBtn.cooldown { font-size: 13px; font-weight: 700; }
 
 .btn-secondary {
   background: var(--bg-card);
@@ -388,6 +390,7 @@ body.light .stat-card::before, body.light .card::before {
 
 .stat-label { font-size: 12.5px; color: var(--text-dim); margin-bottom: 3px; }
 .stat-value { font-size: 21px; font-weight: 800; }
+.stat-source-note { font-size: 10.5px; color: var(--text-faint); margin-top: 2px; white-space: normal; }
 
 /* Decorative gradient fill for the two fixed-direction stats — their meaning
    never flips sign, so a gradient here is safe (unlike balance/total, which
@@ -740,13 +743,20 @@ body:not(.light) .stale-badge { color: #ffcb7d; }
 .assistant-tx-undo:disabled { color: var(--text-faint); cursor: default; text-decoration: none; }
 
 .assistant-tx-chip.added { color: var(--text-dim); }
-.assistant-tx-chip.added .assistant-tx-date { color: var(--income); font-weight: 600; }
-.assistant-tx-confirm {
-  margin-inline-start: auto; background: linear-gradient(135deg, var(--primary), #9b7bff);
-  color: #fff; border: none; border-radius: 8px; padding: 6px 12px;
-  font-size: 12px; font-weight: 600; cursor: pointer;
+.assistant-decision-badge { font-size: 12px; font-weight: 600; margin-inline-start: auto; }
+.assistant-decision-badge.added { color: var(--income); }
+.assistant-decision-badge.rejected { color: var(--text-faint); }
+
+.assistant-decision-buttons { display: flex; gap: 6px; margin-inline-start: auto; }
+.assistant-decision-btn {
+  width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer;
+  font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
 }
-.assistant-tx-confirm:hover { filter: brightness(1.08); }
+.assistant-decision-btn.confirm { background: rgba(47,214,153,0.18); color: var(--income); }
+.assistant-decision-btn.confirm:hover { background: var(--income); color: #fff; }
+.assistant-decision-btn.reject { background: rgba(255,107,122,0.14); color: var(--expense); }
+.assistant-decision-btn.reject:hover { background: var(--expense); color: #fff; }
 
 .assistant-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .assistant-suggestion-chip {
@@ -1308,6 +1318,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
           <div>
             <div class="stat-label">יתרה כוללת (כל הזמנים)</div>
             <div class="stat-value" id="statTotal">₪0</div>
+            <div class="stat-source-note" id="statTotalSource" hidden></div>
           </div>
           <div class="stat-spark" id="sparkTotal"></div>
         </div>
@@ -1568,12 +1579,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
           </div>
         </div>
         <div class="assistant-chat-log" id="assistantChatLog"></div>
-        <div class="assistant-suggestions" id="assistantSuggestions">
-          <button type="button" class="assistant-suggestion-chip" data-text="כמה הוצאתי החודש?">כמה הוצאתי החודש?</button>
-          <button type="button" class="assistant-suggestion-chip" data-text="קניתי חלב ולחם ב-25 שקל">קניתי חלב ולחם ב-25 שקל</button>
-          <button type="button" class="assistant-suggestion-chip" data-text="יש לי מנוי נטפליקס ב-40 שקל כל חודש">יש לי מנוי נטפליקס ב-40 שקל כל חודש</button>
-          <button type="button" class="assistant-suggestion-chip" data-text="מה היתרה שלי?">מה היתרה שלי?</button>
-        </div>
+        <div class="assistant-suggestions" id="assistantSuggestions"></div>
         <form id="assistantForm" class="assistant-input-row">
           <input type="text" id="assistantInput" placeholder="כתוב הודעה... (לדוגמה: קניתי קפה ב-14 שקל)" autocomplete="off">
           <button type="submit" class="btn-primary" id="assistantSendBtn"><span data-icon="send" class="icon-xs"></span></button>
@@ -1686,6 +1692,18 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
           <p class="hint">מחיקת כל הנתונים היא פעולה בלתי הפיכה.</p>
           <button class="btn-danger" id="resetAllBtn"><span data-icon="trash"></span> מחיקת כל הנתונים</button>
         </div>
+      </div>
+
+      <h4 class="settings-section-title">עוזר AI</h4>
+      <div class="card">
+        <div class="card-header"><h3><span data-icon="bot" class="icon-xs"></span> הודעות מהירות בצ'אט</h3></div>
+        <p class="hint">אלה הכפתורים שמופיעים בעמוד "עוזר AI" לשליחה מהירה בלחיצה אחת. אפשר להוסיף, למחוק או לערוך אותם כרצונך.</p>
+        <div id="assistantSuggestionsList" class="cat-chip-list"></div>
+        <div class="add-cat-row">
+          <input type="text" id="newAssistantSuggestion" placeholder="הודעה מהירה חדשה...">
+          <button class="btn-secondary small" id="addAssistantSuggestionBtn">הוסף</button>
+        </div>
+        <button type="button" class="btn-link" id="resetAssistantSuggestionsBtn">שחזור לברירת המחדל</button>
       </div>
     </section>
 
@@ -2082,6 +2100,13 @@ function emptyState(iconName, text, cta) {
 
 const DEFAULT_ACCOUNT_ID = 'default';
 
+const DEFAULT_ASSISTANT_SUGGESTIONS = [
+  'כמה הוצאתי החודש?',
+  'קניתי חלב ולחם ב-25 שקל',
+  'יש לי מנוי נטפליקס ב-40 שקל כל חודש',
+  'מה היתרה שלי?'
+];
+
 const DEFAULT_STATE = () => ({
   transactions: [], // {id, type: 'income'|'expense', amount, category, date:'YYYY-MM-DD', note, accountId, recurringId?, receipt?}
   categories: {
@@ -2094,7 +2119,8 @@ const DEFAULT_STATE = () => ({
   accounts: [{ id: DEFAULT_ACCOUNT_ID, name: 'חשבון ראשי' }], // {id, name}
   quickAdds: [], // {id, label, type, category, amount} — one-tap quick-add presets
   envelopeAdjustments: {}, // { [monthKey]: { [categoryName]: adjustmentAmount } } — temporary per-month transfers between budget envelopes
-  balanceCheckins: [] // {id, date, amount} — manual "how much money do I actually have" log entries
+  balanceCheckins: [], // {id, date, amount} — manual "how much money do I actually have" log entries
+  assistantSuggestions: DEFAULT_ASSISTANT_SUGGESTIONS.map(text => ({ id: uid(), text })) // {id, text} — editable one-tap quick-message chips shown on the AI assistant page
 });
 
 let state = DEFAULT_STATE();
@@ -2123,7 +2149,8 @@ function normalizeState(parsed) {
     accounts,
     quickAdds: parsed.quickAdds || [],
     envelopeAdjustments: parsed.envelopeAdjustments || {},
-    balanceCheckins: parsed.balanceCheckins || []
+    balanceCheckins: parsed.balanceCheckins || [],
+    assistantSuggestions: (parsed.assistantSuggestions && parsed.assistantSuggestions.length) ? parsed.assistantSuggestions : def.assistantSuggestions
   };
 }
 
@@ -2255,8 +2282,14 @@ function monthLabel(key) {
   return d.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 }
 
-function formatCurrency(n, decimals = 0) {
+function formatCurrency(n, decimals) {
   const val = Number(n) || 0;
+  if (decimals === undefined) {
+    // Whole-shekel amounts (the vast majority) display exactly as before, with no decimals.
+    // An amount with real cents (e.g. 13.9, added by the AI assistant or typed in by hand)
+    // now shows them instead of silently rounding to the nearest shekel.
+    decimals = Number.isInteger(Math.round(val * 100) / 100) ? 0 : 2;
+  }
   return new Intl.NumberFormat('he-IL', {
     style: 'currency', currency: 'ILS',
     minimumFractionDigits: decimals, maximumFractionDigits: decimals
@@ -2712,12 +2745,25 @@ function renderDashboard() {
   const balance = income - expense;
   const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
 
+  // If the user has ever manually recorded "how much money I actually have" (Settings page),
+  // that trumps the transaction-derived total here — it's what they actually counted, and the
+  // whole point of that feature is to be the number they trust when the two disagree.
+  const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const displayTotal = latestCheckin ? Number(latestCheckin.amount) : totalAll;
+  const sourceNoteEl = document.getElementById('statTotalSource');
+  if (latestCheckin) {
+    sourceNoteEl.textContent = `מהרישום הידני · ${formatDateDisplay(latestCheckin.date)}`;
+    sourceNoteEl.hidden = false;
+  } else {
+    sourceNoteEl.hidden = true;
+  }
+
   animateStatValue('statIncome', income);
   animateStatValue('statExpense', expense);
   animateStatValue('statBalance', balance);
-  animateStatValue('statTotal', totalAll);
+  animateStatValue('statTotal', displayTotal);
   document.getElementById('statBalance').style.color = balance >= 0 ? 'var(--income)' : 'var(--expense)';
-  document.getElementById('statTotal').style.color = totalAll >= 0 ? 'var(--text)' : 'var(--expense)';
+  document.getElementById('statTotal').style.color = displayTotal >= 0 ? 'var(--text)' : 'var(--expense)';
 
   renderTrendChart();
   renderCategoryChart(monthTx);
@@ -3847,6 +3893,7 @@ function renderAssistantPage() {
   const setupCard = document.getElementById('assistantSetupCard');
   const chatCard = document.getElementById('assistantChatCard');
   const removeBtn = document.getElementById('assistantRemoveKeyBtn');
+  renderAssistantSuggestions();
   if (hasKey) {
     setupCard.hidden = true;
     chatCard.hidden = false;
@@ -3869,10 +3916,43 @@ function openAssistantSetup() {
   document.getElementById('assistantApiKeyInput').focus();
 }
 
+// Renders one proposal chip (a pending transaction or recurring instruction the AI detected).
+// Nothing is written to `state` until the person explicitly taps ✓ — tapping ✗ discards the
+// proposal without ever having created anything to undo. `decision` is undefined/'confirmed'/'rejected'.
+function assistantProposalChipHtml({ msgId, decision, sign, type, amountLabel, detailLabel, confirmFn, confirmTitle, addedLabel }) {
+  if (decision === 'confirmed') {
+    return `
+      <div class="assistant-tx-chip added">
+        <span class="assistant-tx-amount ${type}">${sign}${amountLabel}</span>
+        <span class="assistant-tx-cat">${detailLabel}</span>
+        <span class="assistant-decision-badge added">✓ ${addedLabel}</span>
+      </div>`;
+  }
+  if (decision === 'rejected') {
+    return `
+      <div class="assistant-tx-chip cancelled">
+        <span class="assistant-tx-amount ${type}">${sign}${amountLabel}</span>
+        <span class="assistant-tx-cat">${detailLabel}</span>
+        <span class="assistant-decision-badge rejected">✗ לא נוסף</span>
+      </div>`;
+  }
+  return `
+    <div class="assistant-tx-chip pending">
+      <span class="assistant-tx-amount ${type}">${sign}${amountLabel}</span>
+      <span class="assistant-tx-cat">${detailLabel}</span>
+      <div class="assistant-decision-buttons">
+        <button type="button" class="assistant-decision-btn confirm" title="${confirmTitle}" onclick="${confirmFn}('${msgId}')">✓</button>
+        <button type="button" class="assistant-decision-btn reject" title="ביטול" onclick="rejectAssistantProposal('${msgId}')">✗</button>
+      </div>
+    </div>`;
+}
+
 function assistantBubbleHtml(m) {
   const cls = 'assistant-bubble ' + (m.role === 'user' ? 'user' : 'model') + (m.error ? ' error' : '');
   let extraHtml = '';
   if (m.tx) {
+    // Legacy messages from before the confirm/reject flow: the transaction was already added
+    // instantly, so this keeps working with its original undo button rather than losing history.
     const sign = m.tx.type === 'income' ? '+' : '−';
     extraHtml = `
       <div class="assistant-tx-chip" data-tx-chip="${m.tx.id}">
@@ -3881,23 +3961,33 @@ function assistantBubbleHtml(m) {
         <span class="assistant-tx-date">${formatDateDisplay(m.tx.date)}</span>
         <button type="button" class="assistant-tx-undo" data-undo-tx="${m.tx.id}" onclick="undoAssistantTransaction('${m.tx.id}')">ביטול</button>
       </div>`;
+  } else if (m.pendingTx) {
+    const p = m.pendingTx;
+    extraHtml = assistantProposalChipHtml({
+      msgId: m.id,
+      decision: m.txDecision,
+      sign: p.type === 'income' ? '+' : '−',
+      type: p.type,
+      amountLabel: formatCurrency(p.amount),
+      detailLabel: `${escapeHtml(p.category)} · ${formatDateDisplay(p.date)}`,
+      confirmFn: 'confirmAssistantTransaction',
+      confirmTitle: 'הוספה',
+      addedLabel: 'נוסף'
+    });
   } else if (m.recurring) {
     const r = m.recurring;
-    const sign = r.type === 'income' ? '+' : '−';
     const freqLabel = r.frequency === 'weekly' ? 'שבועי' : 'חודשי';
-    extraHtml = m.recurringAdded
-      ? `
-      <div class="assistant-tx-chip added">
-        <span class="assistant-tx-amount ${r.type}">${sign}${formatCurrency(r.amount)}</span>
-        <span class="assistant-tx-cat">${escapeHtml(r.name)} · ${escapeHtml(r.category)} · ${freqLabel}</span>
-        <span class="assistant-tx-date">נוסף כהוראת קבע ✓</span>
-      </div>`
-      : `
-      <div class="assistant-tx-chip pending" data-recurring-chip="${m.id}">
-        <span class="assistant-tx-amount ${r.type}">${sign}${formatCurrency(r.amount)}</span>
-        <span class="assistant-tx-cat">${escapeHtml(r.name)} · ${escapeHtml(r.category)} · ${freqLabel}</span>
-        <button type="button" class="assistant-tx-confirm" onclick="confirmAssistantRecurring('${m.id}')">הוספה כהוראת קבע</button>
-      </div>`;
+    extraHtml = assistantProposalChipHtml({
+      msgId: m.id,
+      decision: m.recurringDecision,
+      sign: r.type === 'income' ? '+' : '−',
+      type: r.type,
+      amountLabel: formatCurrency(r.amount),
+      detailLabel: `${escapeHtml(r.name)} · ${escapeHtml(r.category)} · ${freqLabel}`,
+      confirmFn: 'confirmAssistantRecurring',
+      confirmTitle: 'הוספה כהוראת קבע',
+      addedLabel: 'נוסף כהוראת קבע'
+    });
   }
   return `<div class="${cls}">${escapeHtml(m.text || '')}${extraHtml}</div>`;
 }
@@ -3907,17 +3997,33 @@ function renderAssistantChatLog() {
   if (!log) return;
   const messages = loadAssistantChat();
   if (messages.length === 0) {
-    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל") ואני ארשום את זה, לתאר משהו קבוע (למשל "יש לי מנוי נטפליקס ב-40 שקל כל חודש") ואציע להוסיף אותו כהוראת קבע, או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?").</p>';
+    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל"), לתאר משהו קבוע (למשל "יש לי מנוי נטפליקס ב-40 שקל כל חודש"), או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?"). על כל תנועה או הוראת קבע שאזהה תוכל לאשר (✓) או לבטל (✗) לפני שהיא נכנסת בפועל.</p>';
     return;
   }
   log.innerHTML = messages.map(assistantBubbleHtml).join('');
   log.scrollTop = log.scrollHeight;
 }
 
-function confirmAssistantRecurring(msgId) {
+function findAssistantMessage(msgId) {
   const messages = loadAssistantChat();
   const msg = messages.find(m => m.id === msgId);
-  if (!msg || !msg.recurring || msg.recurringAdded) return;
+  return { messages, msg };
+}
+
+function confirmAssistantTransaction(msgId) {
+  const { messages, msg } = findAssistantMessage(msgId);
+  if (!msg || !msg.pendingTx || msg.txDecision) return;
+  const applied = applyAssistantTransaction(msg.pendingTx);
+  if (!applied.ok) { toast('סכום לא תקין'); return; }
+  msg.txDecision = 'confirmed';
+  saveAssistantChat(messages);
+  renderAssistantChatLog();
+  toast('התנועה נוספה');
+}
+
+function confirmAssistantRecurring(msgId) {
+  const { messages, msg } = findAssistantMessage(msgId);
+  if (!msg || !msg.recurring || msg.recurringDecision) return;
   const r = msg.recurring;
   const type = r.type === 'income' ? 'income' : 'expense';
   const amount = Number(r.amount);
@@ -3935,12 +4041,26 @@ function confirmAssistantRecurring(msgId) {
   saveState();
   generateRecurringTransactions();
   renderAll();
-  msg.recurringAdded = true;
+  msg.recurringDecision = 'confirmed';
   saveAssistantChat(messages);
   renderAssistantChatLog();
   toast(`"${name}" נוסף כהוראת קבע`);
 }
 
+// Shared ✗ handler for both proposal types — nothing was ever written to state, so rejecting
+// is just marking the message so its chip renders as declined; no data to roll back.
+function rejectAssistantProposal(msgId) {
+  const { messages, msg } = findAssistantMessage(msgId);
+  if (!msg) return;
+  if (msg.pendingTx && !msg.txDecision) msg.txDecision = 'rejected';
+  else if (msg.recurring && !msg.recurringDecision) msg.recurringDecision = 'rejected';
+  else return;
+  saveAssistantChat(messages);
+  renderAssistantChatLog();
+}
+
+// Kept only so chat history saved before the confirm/reject flow (when a transaction was
+// added instantly) still has a working undo button on those older messages.
 function undoAssistantTransaction(id) {
   const idx = state.transactions.findIndex(t => t.id === id);
   if (idx === -1) { toast('התנועה כבר לא קיימת'); return; }
@@ -3955,6 +4075,56 @@ function undoAssistantTransaction(id) {
     const chip = btn.closest('.assistant-tx-chip');
     if (chip) chip.classList.add('cancelled');
   }
+}
+
+// Editable one-tap quick-message chips (shown on the AI assistant page, managed from Settings).
+function renderAssistantSuggestions() {
+  const list = state.assistantSuggestions || [];
+  const chatEl = document.getElementById('assistantSuggestions');
+  if (chatEl) {
+    chatEl.innerHTML = list.map(s =>
+      `<button type="button" class="assistant-suggestion-chip" data-text="${escapeHtml(s.text)}">${escapeHtml(s.text)}</button>`
+    ).join('');
+  }
+  const settingsEl = document.getElementById('assistantSuggestionsList');
+  if (settingsEl) {
+    settingsEl.innerHTML = list.length === 0
+      ? '<p class="hint">אין הודעות מהירות מוגדרות.</p>'
+      : list.map(s =>
+          `<span class="cat-chip">${escapeHtml(s.text)}<button onclick="removeAssistantSuggestion('${s.id}')" title="מחיקה">${icon('close', 'icon-xs')}</button></span>`
+        ).join('');
+  }
+}
+
+function addAssistantSuggestion(rawText) {
+  const text = (rawText || '').trim();
+  if (!text) return;
+  if (!state.assistantSuggestions) state.assistantSuggestions = [];
+  if (state.assistantSuggestions.some(s => s.text === text)) { toast('ההודעה הזו כבר קיימת'); return; }
+  state.assistantSuggestions.push({ id: uid(), text });
+  saveState();
+  renderAssistantSuggestions();
+}
+
+function removeAssistantSuggestion(id) {
+  const list = state.assistantSuggestions || [];
+  const idx = list.findIndex(s => s.id === id);
+  if (idx === -1) return;
+  const [removed] = list.splice(idx, 1);
+  saveState();
+  renderAssistantSuggestions();
+  showUndoToast(`ההודעה "${removed.text}" הוסרה`, () => {
+    list.splice(idx, 0, removed);
+    saveState();
+    renderAssistantSuggestions();
+  });
+}
+
+function resetAssistantSuggestions() {
+  state.assistantSuggestions = DEFAULT_ASSISTANT_SUGGESTIONS.map(text => ({ id: uid(), text }));
+  saveState();
+  renderAssistantSuggestions();
+  toast('שוחזרו הודעות ברירת המחדל');
 }
 
 // Numeric summary of the user's data — this, not the raw transaction list, is what lets the
@@ -4014,7 +4184,7 @@ ${JSON.stringify(context)}
 
 כללים:
 - "message" הוא תמיד טקסט קצר, טבעי וידידותי בעברית שיוצג למשתמש כפי שהוא (אישור, הסבר, תשובה, או בקשת הבהרה) — לעולם לא לחזור בו על מבנה ה-JSON.
-- add_transaction: תנועה חד-פעמית שכבר קרתה או קורית עכשיו. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאת כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך אחר במפורש.
+- add_transaction: תנועה חד-פעמית שכבר קרתה או קורית עכשיו. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאת כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך אחר במפורש. amount הוא מספר בלבד ויכול לכלול אגורות/שברים (למשל 13.9 או 25.5) — אל תעגל אותו לשלם.
 - add_recurring: כשהמשתמש מתאר משהו שחוזר על עצמו באופן קבוע (מילות מפתח כמו "כל חודש", "כל שבוע", "מנוי", "משכורת חודשית", "קבוע", "שכר דירה"). name הוא שם קצר וברור (למשל "נטפליקס", "שכר דירה", "משכורת"). frequency הוא "monthly" כברירת מחדל, או "weekly" רק אם המשתמש ציין משהו שבועי במפורש. startDate בברירת מחדל הוא today מההקשר. ההבחנה מ-add_transaction: אם המשתמש מתאר תשלום בודד שכבר קרה — add_transaction. אם הוא מתאר מחויבות חוזרת/עתידית שצריכה לחזור על עצמה אוטומטית — add_recurring.
 - clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה — אל תנחש, בקש בעדינות דרך "message".
 - answer: כשהמשתמש שואל שאלה ולא מתאר תנועה/הוראת קבע חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש.
@@ -4044,13 +4214,63 @@ async function callGeminiAssistant(messages) {
 
   if (!res.ok) {
     let msg = `שגיאה מהשרת (קוד ${res.status})`;
+    let rawMsg = '';
+    let errDetails = null;
     try {
       const errJson = await res.json();
-      if (errJson && errJson.error && errJson.error.message) msg += `: ${errJson.error.message}`;
+      if (errJson && errJson.error && errJson.error.message) { rawMsg = errJson.error.message; msg += `: ${rawMsg}`; }
+      if (errJson && errJson.error && Array.isArray(errJson.error.details)) errDetails = errJson.error.details;
     } catch (e) { /* ignore */ }
     if (res.status === 400 || res.status === 403) msg += ' — כדאי לבדוק שהמפתח תקין.';
     if (res.status === 404) msg += ' — ייתכן ששם המודל הוצא משימוש. אפשר לעדכן שם מודל חדש דרך "שינוי מפתח/מודל" למעלה (Google לפעמים מציינת בהודעת השגיאה איזה מודל להשתמש בו במקום).';
-    throw new Error(msg);
+    if (res.status === 503 || res.status === 500) {
+      msg = 'המודל הזה עמוס כרגע אצל Google (לא קשור למכסה שלך ולא לחשבון שלך — זו עומס זמני על השרתים שלהם). '
+        + 'בדרך כלל זה חולף תוך דקה-שתיים, כדאי פשוט לנסות שוב עוד רגע. אם זה נמשך, אפשר לנסות מודל אחר (למשל גרסת "lite") דרך "שינוי מפתח/מודל" למעלה.';
+    }
+    let retryAfterSeconds = null;
+    if (res.status === 429) {
+      // Google returns the precise retry delay (and which quota was hit) inside error.details,
+      // as structured google.rpc.RetryInfo / google.rpc.QuotaFailure entries — these are far more
+      // reliable than trying to regex the free-text "Please retry in Xs" out of error.message,
+      // and they're the only way to tell a short per-minute throttle apart from a full daily cap.
+      let retryDelaySeconds = null;
+      let isDailyQuota = false;
+      if (errDetails) {
+        errDetails.forEach(d => {
+          if (typeof d.retryDelay === 'string') {
+            const rd = d.retryDelay.match(/^(\d+(?:\.\d+)?)s$/);
+            if (rd) retryDelaySeconds = Math.ceil(parseFloat(rd[1]));
+          }
+          if (Array.isArray(d.violations)) {
+            d.violations.forEach(v => {
+              const blob = `${v.quotaId || ''} ${v.description || ''} ${v.quotaMetric || ''}`;
+              if (/day|daily|perday/i.test(blob)) isDailyQuota = true;
+            });
+          }
+        });
+      }
+      if (retryDelaySeconds == null) {
+        const m = rawMsg.match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+        retryDelaySeconds = m ? Math.ceil(parseFloat(m[1])) : null;
+      }
+      if (!isDailyQuota && /day|daily/i.test(rawMsg)) isDailyQuota = true;
+      // A retry delay of several minutes or more effectively behaves like a daily/long-window
+      // cap as far as the user is concerned — no point offering a live countdown for that.
+      if (retryDelaySeconds != null && retryDelaySeconds > 300) isDailyQuota = true;
+
+      if (isDailyQuota) {
+        msg = 'נגמרה המכסה החינמית היומית של Gemini למודל הזה (לרוב עד 20 בקשות ליום בטיר החינמי). זה לא קשור לתקלה באתר — זו מגבלה שגוגל שמה על מפתחות חינמיים, והיא מתאפסת מדי יום (בדרך כלל סביב חצות לפי שעון האוקיינוס השקט בארה"ב). '
+          + 'אפשר לחכות למחר, לבדוק את המכסה בפועל בכתובת aistudio.google.com/app/apikey, או להפעיל חיוב (billing) בפרויקט של גוגל כדי להסיר את ההגבלה הזו.';
+      } else {
+        retryAfterSeconds = retryDelaySeconds != null ? Math.max(1, retryDelaySeconds) : 20;
+        msg = 'חרגת מהמכסה החינמית הזמנית של Gemini (יותר מדי בקשות בזמן קצר). זה לא קשור לתקלה באתר — Google מגבילה כמות בקשות בדקה במפתח חינמי.'
+          + ` אפשר לנסות שוב בעוד כ-${retryAfterSeconds} שניות.`;
+      }
+    }
+    const error = new Error(msg);
+    error.status = res.status;
+    if (retryAfterSeconds) error.retryAfterSeconds = retryAfterSeconds;
+    throw error;
   }
 
   const data = await res.json();
@@ -4090,6 +4310,7 @@ async function handleAssistantSend(rawText) {
   const input = document.getElementById('assistantInput');
   const sendBtn = document.getElementById('assistantSendBtn');
   const log = document.getElementById('assistantChatLog');
+  let quotaRetryAfter = null;
 
   let messages = loadAssistantChat();
   messages.push({ id: uid(), role: 'user', text });
@@ -4105,15 +4326,22 @@ async function handleAssistantSend(rawText) {
   try {
     const result = await callGeminiAssistant(messages);
     let replyText = (result && result.message) || '';
-    let tx = null;
+    let pendingTx = null;
     let recurring = null;
     if (result && result.intent === 'add_transaction' && result.transaction) {
-      const applied = applyAssistantTransaction(result.transaction);
-      if (applied.ok) {
-        tx = applied;
-        if (!replyText) replyText = 'נרשם בהצלחה.';
+      const t = result.transaction;
+      const amount = Number(t.amount);
+      if (amount && !isNaN(amount) && amount > 0) {
+        const type = t.type === 'income' ? 'income' : 'expense';
+        const category = (t.category || '').toString().trim() || (type === 'income' ? 'אחר' : 'שונות');
+        pendingTx = {
+          type, amount, category,
+          note: (t.note || '').toString().trim(),
+          date: /^\d{4}-\d{2}-\d{2}$/.test(t.date || '') ? t.date : todayISO()
+        };
+        if (!replyText) replyText = 'זיהיתי תנועה — אפשר לאשר (✓) או לבטל (✗) למטה.';
       } else if (!replyText) {
-        replyText = 'לא הצלחתי לזהות סכום תקין מההודעה — אפשר לנסות שוב עם סכום ברור?';
+        replyText = 'לא הצלחתי לזהות סכום תקין מההודעה — אפשר לנסות שוב עם סכום ברור? (גם סכומים עם אגורות כמו 13.9 בסדר גמור)';
       }
     } else if (result && result.intent === 'add_recurring' && result.recurring) {
       const rr = result.recurring;
@@ -4127,19 +4355,20 @@ async function handleAssistantSend(rawText) {
           frequency: rr.frequency === 'weekly' ? 'weekly' : 'monthly',
           startDate: /^\d{4}-\d{2}-\d{2}$/.test(rr.startDate || '') ? rr.startDate : todayISO()
         };
-        if (!replyText) replyText = 'זיהיתי הוראת קבע — אפשר ללחוץ על הכפתור למטה כדי להוסיף אותה בפועל.';
+        if (!replyText) replyText = 'זיהיתי הוראת קבע — אפשר לאשר (✓) או לבטל (✗) למטה.';
       } else if (!replyText) {
         replyText = 'לא הצלחתי לזהות סכום תקין להוראת הקבע — אפשר לפרט שוב עם סכום ברור?';
       }
     }
     if (!replyText) replyText = 'קיבלתי.';
     messages = loadAssistantChat();
-    messages.push({ id: uid(), role: 'model', text: replyText, tx, recurring });
+    messages.push({ id: uid(), role: 'model', text: replyText, pendingTx, recurring });
     saveAssistantChat(messages);
   } catch (err) {
     messages = loadAssistantChat();
     messages.push({ id: uid(), role: 'model', text: `אירעה שגיאה: ${err && err.message ? err.message : err}`, error: true });
     saveAssistantChat(messages);
+    if (err && err.status === 429 && err.retryAfterSeconds) quotaRetryAfter = err.retryAfterSeconds;
   } finally {
     const loadingBubble = document.getElementById('assistantLoadingBubble');
     if (loadingBubble) loadingBubble.remove();
@@ -4147,6 +4376,33 @@ async function handleAssistantSend(rawText) {
     if (input) { input.disabled = false; input.focus(); }
     if (sendBtn) sendBtn.disabled = false;
   }
+  if (quotaRetryAfter) startAssistantCooldown(quotaRetryAfter);
+}
+
+function startAssistantCooldown(seconds) {
+  const input = document.getElementById('assistantInput');
+  const sendBtn = document.getElementById('assistantSendBtn');
+  if (!sendBtn) return;
+  let remaining = Math.max(1, Math.ceil(seconds));
+  const originalHtml = sendBtn.dataset.cooldownOriginal || sendBtn.innerHTML;
+  sendBtn.dataset.cooldownOriginal = originalHtml;
+  if (input) input.disabled = true;
+  sendBtn.disabled = true;
+  sendBtn.classList.add('cooldown');
+  const tick = () => {
+    if (remaining <= 0) {
+      sendBtn.disabled = false;
+      sendBtn.classList.remove('cooldown');
+      sendBtn.innerHTML = sendBtn.dataset.cooldownOriginal || originalHtml;
+      delete sendBtn.dataset.cooldownOriginal;
+      if (input) input.disabled = false;
+      return;
+    }
+    sendBtn.textContent = remaining;
+    remaining -= 1;
+    setTimeout(tick, 1000);
+  };
+  tick();
 }
 
 /* ---------------- Settings page ---------------- */
@@ -4156,6 +4412,7 @@ function renderSettingsPage() {
   renderCatList('income');
   renderCatList('expense');
   renderAccountsList();
+  renderAssistantSuggestions();
   populateReportYearSelect();
   populateReportMonthSelect();
   renderPinSettingsCard();
@@ -5150,7 +5407,8 @@ function handleJsonImport(file) {
         accounts: importedAccounts,
         quickAdds: parsed.quickAdds || [],
         envelopeAdjustments: parsed.envelopeAdjustments || {},
-        balanceCheckins: parsed.balanceCheckins || []
+        balanceCheckins: parsed.balanceCheckins || [],
+        assistantSuggestions: (parsed.assistantSuggestions && parsed.assistantSuggestions.length) ? parsed.assistantSuggestions : DEFAULT_STATE().assistantSuggestions
       };
       saveState();
       renderAll();
@@ -5476,6 +5734,16 @@ function initEvents() {
   document.getElementById('addAccountBtn').addEventListener('click', addAccount);
   document.getElementById('newAccountName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addAccount(); } });
 
+  document.getElementById('addAssistantSuggestionBtn').addEventListener('click', () => {
+    const input = document.getElementById('newAssistantSuggestion');
+    addAssistantSuggestion(input.value);
+    input.value = '';
+  });
+  document.getElementById('newAssistantSuggestion').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addAssistantSuggestionBtn').click(); }
+  });
+  document.getElementById('resetAssistantSuggestionsBtn').addEventListener('click', resetAssistantSuggestions);
+
   document.getElementById('pinManageForm').addEventListener('submit', (e) => {
     e.preventDefault();
     handlePinManageSubmit();
@@ -5588,6 +5856,7 @@ function init() {
 function finishInit() {
   generateRecurringTransactions();
   initEvents();
+  initSidebarSwipeGesture();
   hydrateIcons();
   populateMonthFilter();
   populateFilterCategorySelect();
@@ -5597,6 +5866,44 @@ function finishInit() {
   checkBudgetAlert();
   checkWhatsNew();
   goToPage('dashboard');
+}
+
+/* ---------------- Mobile: edge-swipe to open the sidebar menu ----------------
+   The mobile sidebar docks against the right edge of the screen (see the `.sidebar.mobile-open`
+   rule), so a right-to-left swipe starting from that edge reads naturally as "pulling the menu
+   out" — the same convention as native app drawers. Only tracked when a touch actually starts
+   within a narrow strip along the right edge, so it never fights with normal scrolling or with
+   swiping through in-page content (charts, tables, etc.) anywhere else on the screen. */
+function initSidebarSwipeGesture() {
+  const EDGE_ZONE_PX = 24;
+  const MIN_DELTA_X = 60;
+  const MAX_DELTA_Y = 60;
+  const MOBILE_BREAKPOINT = 720;
+  let startX = null, startY = null, tracking = false;
+
+  document.addEventListener('touchstart', (e) => {
+    tracking = false;
+    if (window.innerWidth > MOBILE_BREAKPOINT) return;
+    if (document.getElementById('sidebar').classList.contains('mobile-open')) return;
+    const t = e.touches[0];
+    if (!t || t.clientX < window.innerWidth - EDGE_ZONE_PX) return;
+    startX = t.clientX;
+    startY = t.clientY;
+    tracking = true;
+  }, { passive: true });
+
+  document.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const deltaX = t.clientX - startX;
+    const deltaY = Math.abs(t.clientY - startY);
+    if (deltaX <= -MIN_DELTA_X && deltaY < MAX_DELTA_Y) {
+      document.getElementById('sidebar').classList.add('mobile-open');
+      document.getElementById('sidebarBackdrop').classList.add('active');
+    }
+  }, { passive: true });
 }
 
 /* ---------------- Lock screen ---------------- */
