@@ -2737,22 +2737,33 @@ function deleteBalanceCheckin(id) {
   });
 }
 
+// The dashboard's "יתרה כוללת" figure, kept live even when a manual balance check-in exists.
+// If the user has ever recorded "how much money I actually have" (Settings page), that's the
+// trusted anchor — but it shouldn't freeze at that one snapshot forever. Every income/expense
+// recorded *after* the check-in date still needs to move the number, otherwise it just goes
+// stale the moment you add a new transaction. Transactions dated on/before the check-in are
+// assumed to already be reflected in what the person counted, so only later ones are netted in.
+function computeCurrentBalanceEstimate() {
+  const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
+  if (!latestCheckin) return { amount: totalAll, latestCheckin: null };
+  const netSinceCheckin = state.transactions
+    .filter(t => t.date > latestCheckin.date)
+    .reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+  return { amount: Number(latestCheckin.amount) + netSinceCheckin, latestCheckin };
+}
+
 function renderDashboard() {
   const key = selectedMonthKey();
   const monthTx = txInMonth(key);
   const income = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
   const expense = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
   const balance = income - expense;
-  const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
 
-  // If the user has ever manually recorded "how much money I actually have" (Settings page),
-  // that trumps the transaction-derived total here — it's what they actually counted, and the
-  // whole point of that feature is to be the number they trust when the two disagree.
-  const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
-  const displayTotal = latestCheckin ? Number(latestCheckin.amount) : totalAll;
+  const { amount: displayTotal, latestCheckin } = computeCurrentBalanceEstimate();
   const sourceNoteEl = document.getElementById('statTotalSource');
   if (latestCheckin) {
-    sourceNoteEl.textContent = `מהרישום הידני · ${formatDateDisplay(latestCheckin.date)}`;
+    sourceNoteEl.textContent = `מהרישום הידני (${formatDateDisplay(latestCheckin.date)}) + תנועות מאז`;
     sourceNoteEl.hidden = false;
   } else {
     sourceNoteEl.hidden = true;
@@ -4153,12 +4164,17 @@ function buildAssistantContext() {
     .slice(0, 25)
     .map(t => ({ date: t.date, type: t.type, category: t.category, amount: r2(t.amount), note: t.note || '' }));
   const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
+  // Same figure shown as "יתרה כוללת" on the dashboard: the manual check-in (if any) netted
+  // forward with every transaction recorded since, so the assistant's answer to "מה היתרה שלי"
+  // always matches what the person sees on screen.
+  const currentBalanceEstimate = r2(computeCurrentBalanceEstimate().amount);
 
   return {
     today: todayISO(),
     categories: { income: state.categories.income, expense: state.categories.expense },
     totalBalanceFromTransactions,
     manualBalanceCheckin: latestCheckin ? { date: latestCheckin.date, amount: r2(latestCheckin.amount) } : null,
+    currentBalanceEstimate,
     budgetsMonthly: state.budgets,
     monthlyTotals,
     recentTransactions
@@ -4187,7 +4203,7 @@ ${JSON.stringify(context)}
 - add_transaction: תנועה חד-פעמית שכבר קרתה או קורית עכשיו. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאת כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך אחר במפורש. amount הוא מספר בלבד ויכול לכלול אגורות/שברים (למשל 13.9 או 25.5) — אל תעגל אותו לשלם.
 - add_recurring: כשהמשתמש מתאר משהו שחוזר על עצמו באופן קבוע (מילות מפתח כמו "כל חודש", "כל שבוע", "מנוי", "משכורת חודשית", "קבוע", "שכר דירה"). name הוא שם קצר וברור (למשל "נטפליקס", "שכר דירה", "משכורת"). frequency הוא "monthly" כברירת מחדל, או "weekly" רק אם המשתמש ציין משהו שבועי במפורש. startDate בברירת מחדל הוא today מההקשר. ההבחנה מ-add_transaction: אם המשתמש מתאר תשלום בודד שכבר קרה — add_transaction. אם הוא מתאר מחויבות חוזרת/עתידית שצריכה לחזור על עצמה אוטומטית — add_recurring.
 - clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה — אל תנחש, בקש בעדינות דרך "message".
-- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה/הוראת קבע חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש.
+- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה/הוראת קבע חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש. כששואלים "כמה יש לי" / "מה היתרה שלי" וכדומה — התשובה הנכונה היא תמיד currentBalanceEstimate (זה בדיוק המספר שמוצג לו בדשבורד תחת "יתרה כוללת"), לא totalBalanceFromTransactions לבדו.
 - לעולם אל תמציא סכומים, תאריכים או נתונים שלא נמצאים בהקשר שסופק.`;
 }
 
