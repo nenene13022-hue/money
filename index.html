@@ -758,6 +758,30 @@ body:not(.light) .stale-badge { color: #ffcb7d; }
 .assistant-decision-btn.reject { background: rgba(255,107,122,0.14); color: var(--expense); }
 .assistant-decision-btn.reject:hover { background: var(--expense); color: #fff; }
 
+.assistant-budget-plan {
+  margin-top: 8px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 12px; font-size: 13px; color: var(--text); min-width: 220px;
+}
+.assistant-budget-plan.rejected { opacity: .55; }
+.assistant-budget-plan-title {
+  display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 13px;
+  color: var(--text); margin-bottom: 6px;
+}
+.assistant-budget-rows { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
+.assistant-budget-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 3px 0; border-bottom: 1px dashed var(--border);
+}
+.assistant-budget-row:last-child { border-bottom: none; }
+.assistant-budget-cat { color: var(--text-dim); }
+.assistant-budget-amount { font-weight: 700; color: var(--text); white-space: nowrap; }
+.assistant-budget-permonth { font-weight: 400; color: var(--text-faint); font-size: 11px; margin-inline-start: 2px; }
+.assistant-budget-savings {
+  display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border); color: var(--text-dim); font-size: 12.5px;
+}
+.budget-plan-buttons { margin-top: 8px; margin-inline-start: 0; justify-content: flex-end; }
+
 .assistant-suggestions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .assistant-suggestion-chip {
   background: var(--bg-hover); border: 1px solid var(--border); border-radius: 20px;
@@ -1153,13 +1177,29 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 }
 
 @media (max-width: 720px) {
-  .sidebar { display: none; }
-  .sidebar.mobile-open {
+  /* Slide-in drawer instead of a hard display:none/flex snap: the sidebar stays laid out
+     off-screen (translateX past its own width, since it's docked at the right edge) and slides
+     into view on open. visibility is delayed on close only, so it's still painted while sliding
+     out and only removed from interaction once fully off-screen. */
+  .sidebar {
     display: flex; position: fixed; z-index: 90; width: 240px; box-shadow: var(--shadow);
-    right: 0; top: 0;
+    right: 0; top: 0; height: 100vh;
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform .32s cubic-bezier(.22, .68, 0, 1), visibility 0s linear .32s;
+  }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform .32s cubic-bezier(.22, .68, 0, 1), visibility 0s linear 0s;
+  }
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 80;
+    opacity: 0; pointer-events: none;
+    transition: opacity .32s ease;
   }
   .sidebar-backdrop.active {
-    display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 80;
+    opacity: 1; pointer-events: auto;
   }
   .mobile-topbar {
     display: flex; align-items: center; justify-content: space-between;
@@ -2104,7 +2144,8 @@ const DEFAULT_ASSISTANT_SUGGESTIONS = [
   'כמה הוצאתי החודש?',
   'קניתי חלב ולחם ב-25 שקל',
   'יש לי מנוי נטפליקס ב-40 שקל כל חודש',
-  'מה היתרה שלי?'
+  'מה היתרה שלי?',
+  'תבנה לי תקציב חודשי מומלץ'
 ];
 
 const DEFAULT_STATE = () => ({
@@ -2274,6 +2315,10 @@ function todayISO() {
 
 function monthKey(dateStr) {
   return dateStr.slice(0, 7); // YYYY-MM
+}
+
+function r2(n) {
+  return Math.round(Number(n) * 100) / 100;
 }
 
 function monthLabel(key) {
@@ -2610,7 +2655,7 @@ const PAGE_META = {
   insights: ['תובנות', 'תחזיות, השוואות והמלצות חכמות על סמך הנתונים שלך'],
   budget: ['תקציב ויעדים', 'עקוב אחרי הוצאות מול יעד חודשי לכל קטגוריה'],
   recurring: ['הוראות קבע', 'הכנסות והוצאות שחוזרות על עצמן אוטומטית'],
-  assistant: ['עוזר AI', 'תרשום מה הוצאת בשפה חופשית, או תשאל שאלות על הנתונים שלך'],
+  assistant: ['עוזר AI', 'היועץ הפיננסי האישי שלך — רשום תנועות, שאל שאלות, או בקש תכנון תקציב מומלץ'],
   settings: ['הגדרות ונתונים', 'ניהול קטגוריות, גיבוי, ייבוא וייצוא']
 };
 
@@ -3958,6 +4003,43 @@ function assistantProposalChipHtml({ msgId, decision, sign, type, amountLabel, d
     </div>`;
 }
 
+// A budget-plan proposal spans several categories plus a savings target at once, so it gets its
+// own card shape instead of the single-line chip used for a transaction/recurring proposal — but
+// the same rule applies: nothing is written to state.budgets until the person taps ✓.
+function assistantBudgetPlanHtml(m) {
+  const bp = m.pendingBudgetPlan;
+  const decision = m.budgetPlanDecision;
+  const rows = bp.categories.map(c => `
+    <div class="assistant-budget-row">
+      <span class="assistant-budget-cat">${escapeHtml(c.category)}</span>
+      <span class="assistant-budget-amount">${formatCurrency(c.suggestedMonthly)}<span class="assistant-budget-permonth">/חודש</span></span>
+    </div>`).join('');
+  const savingsRow = bp.suggestedMonthlySavings > 0
+    ? `<div class="assistant-budget-savings"><span data-icon="target" class="icon-xs"></span> יעד חיסכון מוצע: ${formatCurrency(bp.suggestedMonthlySavings)} לחודש${bp.savingsReason ? ` — ${escapeHtml(bp.savingsReason)}` : ''}</div>`
+    : '';
+
+  let footer;
+  if (decision === 'confirmed') {
+    footer = `<div class="assistant-decision-badge added">✓ התקציב הוחל</div>`;
+  } else if (decision === 'rejected') {
+    footer = `<div class="assistant-decision-badge rejected">✗ ההצעה בוטלה</div>`;
+  } else {
+    footer = `
+      <div class="assistant-decision-buttons budget-plan-buttons">
+        <button type="button" class="assistant-decision-btn confirm" title="אישור והחלת כל התקציב" onclick="confirmAssistantBudgetPlan('${m.id}')">✓</button>
+        <button type="button" class="assistant-decision-btn reject" title="ביטול ההצעה" onclick="rejectAssistantProposal('${m.id}')">✗</button>
+      </div>`;
+  }
+
+  return `
+    <div class="assistant-budget-plan ${decision || 'pending'}">
+      <div class="assistant-budget-plan-title"><span data-icon="briefcase" class="icon-xs"></span> הצעת תקציב חודשי</div>
+      <div class="assistant-budget-rows">${rows}</div>
+      ${savingsRow}
+      ${footer}
+    </div>`;
+}
+
 function assistantBubbleHtml(m) {
   const cls = 'assistant-bubble ' + (m.role === 'user' ? 'user' : 'model') + (m.error ? ' error' : '');
   let extraHtml = '';
@@ -3999,6 +4081,8 @@ function assistantBubbleHtml(m) {
       confirmTitle: 'הוספה כהוראת קבע',
       addedLabel: 'נוסף כהוראת קבע'
     });
+  } else if (m.pendingBudgetPlan) {
+    extraHtml = assistantBudgetPlanHtml(m);
   }
   return `<div class="${cls}">${escapeHtml(m.text || '')}${extraHtml}</div>`;
 }
@@ -4008,10 +4092,11 @@ function renderAssistantChatLog() {
   if (!log) return;
   const messages = loadAssistantChat();
   if (messages.length === 0) {
-    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל"), לתאר משהו קבוע (למשל "יש לי מנוי נטפליקס ב-40 שקל כל חודש"), או לשאול שאלה על הנתונים שלך (למשל "כמה הוצאתי החודש על תחבורה?"). על כל תנועה או הוראת קבע שאזהה תוכל לאשר (✓) או לבטל (✗) לפני שהיא נכנסת בפועל.</p>';
+    log.innerHTML = '<p class="hint assistant-empty-hint">שלום! אפשר לספר לי מה הוצאת או הרווחת (למשל "קניתי חלב ולחם ב-25 שקל"), לתאר משהו קבוע (למשל "יש לי מנוי נטפליקס ב-40 שקל כל חודש"), לשאול שאלה על הנתונים שלך (למשל "כמה נשאר לי להוציא על מזון החודש?"), או לבקש ממני לתכנן תקציב חודשי מומלץ לכל הקטגוריות שלך לפי ההיסטוריה האמיתית שלך. על כל תנועה, הוראת קבע או הצעת תקציב שאזהה תוכל לאשר (✓) או לבטל (✗) לפני שהיא נכנסת בפועל.</p>';
     return;
   }
   log.innerHTML = messages.map(assistantBubbleHtml).join('');
+  hydrateIcons(log);
   log.scrollTop = log.scrollHeight;
 }
 
@@ -4058,13 +4143,33 @@ function confirmAssistantRecurring(msgId) {
   toast(`"${name}" נוסף כהוראת קבע`);
 }
 
-// Shared ✗ handler for both proposal types — nothing was ever written to state, so rejecting
-// is just marking the message so its chip renders as declined; no data to roll back.
+// Applies every category in the proposal to state.budgets at once (a plain overwrite, same as
+// editing a budget by hand) and re-renders the whole app so the budget page picks it up too.
+function confirmAssistantBudgetPlan(msgId) {
+  const { messages, msg } = findAssistantMessage(msgId);
+  if (!msg || !msg.pendingBudgetPlan || msg.budgetPlanDecision) return;
+  const bp = msg.pendingBudgetPlan;
+  let count = 0;
+  bp.categories.forEach(c => {
+    const amount = Number(c.suggestedMonthly);
+    if (amount > 0) { state.budgets[c.category] = amount; count++; }
+  });
+  saveState();
+  renderAll();
+  msg.budgetPlanDecision = 'confirmed';
+  saveAssistantChat(messages);
+  renderAssistantChatLog();
+  toast(count === 1 ? 'התקציב עודכן לקטגוריה אחת' : `התקציב עודכן ל-${count} קטגוריות`);
+}
+
+// Shared ✗ handler for all three proposal types — nothing was ever written to state, so
+// rejecting is just marking the message so its card renders as declined; no data to roll back.
 function rejectAssistantProposal(msgId) {
   const { messages, msg } = findAssistantMessage(msgId);
   if (!msg) return;
   if (msg.pendingTx && !msg.txDecision) msg.txDecision = 'rejected';
   else if (msg.recurring && !msg.recurringDecision) msg.recurringDecision = 'rejected';
+  else if (msg.pendingBudgetPlan && !msg.budgetPlanDecision) msg.budgetPlanDecision = 'rejected';
   else return;
   saveAssistantChat(messages);
   renderAssistantChatLog();
@@ -4138,6 +4243,90 @@ function resetAssistantSuggestions() {
   toast('שוחזרו הודעות ברירת המחדל');
 }
 
+// Per-category "how am I doing against my budget, right now" snapshot — this is what lets the
+// assistant act as a real financial manager instead of just a transaction logger: it can tell
+// the person exactly how much is left to spend in a category this month, and (for categories
+// with no budget set yet) what they've actually been spending on average, as raw material for
+// a budget recommendation. Reuses effectiveBudgetLimit() so envelope transfers for the current
+// month are reflected the same way they are everywhere else in the app — and folds in active
+// recurring instructions (state.recurring), both as a floor on the monthly estimate (a brand-new
+// subscription with no transaction history yet is still a real, known monthly cost — see
+// estimateCategoryMonthly() which uses the same Math.max(history, recurring) approach for the
+// budget-setup wizard) and as "money already spoken for" later this month that a fixed instruction
+// hasn't billed yet, so "how much can I still spend" doesn't overstate what's actually free to use.
+function buildCategorySpendingGuide() {
+  const key = monthKey(todayISO());
+  const now = new Date();
+  const today = new Date(now); today.setHours(0, 0, 0, 0);
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const daysLeftInMonth = daysInMonth - now.getDate() + 1; // includes today
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0); monthEnd.setHours(0, 0, 0, 0);
+  const monthExpenseTx = state.transactions.filter(t => monthKey(t.date) === key && t.type === 'expense');
+
+  // Last 3 fully-completed months (excludes the current, still-partial month) — the basis for
+  // "what does this category actually cost me on a normal month" when no budget is set yet.
+  const histMonthKeys = [];
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    histMonthKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const histExpenseTx = state.transactions.filter(t => t.type === 'expense' && histMonthKeys.includes(monthKey(t.date)));
+
+  // Known monthly cost per category from active recurring instructions alone (weekly normalized
+  // to a monthly-equivalent, same 4.33 convention used elsewhere in the app).
+  const recurringMonthlyByCat = {};
+  state.recurring.forEach(r => {
+    if (!r.active || r.type !== 'expense') return;
+    recurringMonthlyByCat[r.category] = r2((recurringMonthlyByCat[r.category] || 0) + Number(r.amount) * (r.frequency === 'weekly' ? 4.33 : 1));
+  });
+
+  // Recurring occurrences still due later THIS month that generateRecurringTransactions() hasn't
+  // materialized yet (it only generates up to today) — real, near-certain outflow that hasn't hit
+  // spentThisMonth. Mirrors that function's own cursor logic, just without writing anything.
+  const pendingRecurringByCat = {};
+  state.recurring.forEach(r => {
+    if (!r.active || r.type !== 'expense') return;
+    const startDate = parseDateLocal(r.startDate);
+    const targetDay = startDate.getDate();
+    let cursor = r.lastGenerated
+      ? (r.frequency === 'monthly' ? addMonthsClamp(parseDateLocal(r.lastGenerated), 1, targetDay) : addDays(parseDateLocal(r.lastGenerated), 7))
+      : startDate;
+    let guard = 0;
+    while (cursor <= monthEnd && guard < 60) {
+      if (cursor > today) {
+        pendingRecurringByCat[r.category] = r2((pendingRecurringByCat[r.category] || 0) + Number(r.amount));
+      }
+      cursor = r.frequency === 'monthly' ? addMonthsClamp(cursor, 1, targetDay) : addDays(cursor, 7);
+      guard++;
+    }
+  });
+
+  const allCategories = new Set([...state.categories.expense, ...Object.keys(state.budgets), ...Object.keys(recurringMonthlyByCat)]);
+  const categories = [];
+  allCategories.forEach(cat => {
+    const hasBudget = state.budgets[cat] !== undefined;
+    const spentThisMonth = r2(monthExpenseTx.filter(t => t.category === cat).reduce((s, t) => s + Number(t.amount), 0));
+    const histSpent = histExpenseTx.filter(t => t.category === cat).reduce((s, t) => s + Number(t.amount), 0);
+    const recurringMonthlyCommitment = r2(recurringMonthlyByCat[cat] || 0);
+    // A known recurring commitment is a floor on the monthly estimate — a subscription added
+    // yesterday with zero transaction history is still a guaranteed real cost, not zero.
+    const avgMonthlyLast3 = r2(Math.max(histSpent / 3, recurringMonthlyCommitment));
+    const pendingRecurringThisMonth = r2(pendingRecurringByCat[cat] || 0);
+    if (!hasBudget && spentThisMonth === 0 && avgMonthlyLast3 === 0) return; // no signal at all — skip
+
+    const entry = { category: cat, budgetMonthly: hasBudget ? Number(effectiveBudgetLimit(cat, key)) : null, spentThisMonth, avgMonthlyLast3, recurringMonthlyCommitment, pendingRecurringThisMonth };
+    if (hasBudget) {
+      // Treat a not-yet-billed recurring charge as already spoken for, so "what's left" reflects
+      // what will actually still be free to spend once fixed commitments this month are honored.
+      const remainingThisMonth = r2(entry.budgetMonthly - spentThisMonth - pendingRecurringThisMonth);
+      entry.remainingThisMonth = remainingThisMonth;
+      entry.suggestedDailyRemaining = daysLeftInMonth > 0 ? r2(Math.max(remainingThisMonth, 0) / daysLeftInMonth) : 0;
+    }
+    categories.push(entry);
+  });
+  return { daysLeftInMonth, categories };
+}
+
 // Numeric summary of the user's data — this, not the raw transaction list, is what lets the
 // assistant answer questions. Kept compact (recent months + a short recent-transactions list)
 // since it's sent to Google on every message once a key is connected.
@@ -4169,6 +4358,13 @@ function buildAssistantContext() {
   // always matches what the person sees on screen.
   const currentBalanceEstimate = r2(computeCurrentBalanceEstimate().amount);
 
+  // Average income/expense over completed months (excludes the current, still-partial one) —
+  // the basis for a realistic monthly savings suggestion, rather than one that swings wildly
+  // depending on how far into the current month it happens to be.
+  const completedMonths = monthlyTotals.slice(0, -1).slice(-3);
+  const avgIncome = completedMonths.length ? r2(completedMonths.reduce((s, m) => s + m.income, 0) / completedMonths.length) : 0;
+  const avgExpense = completedMonths.length ? r2(completedMonths.reduce((s, m) => s + m.expense, 0) / completedMonths.length) : 0;
+
   return {
     today: todayISO(),
     categories: { income: state.categories.income, expense: state.categories.expense },
@@ -4177,33 +4373,39 @@ function buildAssistantContext() {
     currentBalanceEstimate,
     budgetsMonthly: state.budgets,
     monthlyTotals,
+    avgMonthlyIncomeLast3CompletedMonths: avgIncome,
+    avgMonthlyExpenseLast3CompletedMonths: avgExpense,
+    categorySpendingGuide: buildCategorySpendingGuide(),
     recentTransactions
   };
 }
 
 function buildAssistantSystemInstruction(context) {
-  return `את/ה עוזר/ת פיננסי/ת בתוך אפליקציית ניהול תקציב אישי בשם "כספית", ותמיד עונה בעברית.
-לכל הודעה מהמשתמש יש בדיוק אחד מארבעה מצבים אפשריים:
+  return `את/ה היועץ/ת הפיננסי/ת האישי/ת בתוך אפליקציית ניהול תקציב בשם "כספית", ותמיד עונה בעברית. את/ה לא רק רושם/ת תנועות — את/ה עוקב/ת אחרי דפוסי ההכנסות וההוצאות בפועל של המשתמש, ומייעץ/ת לו באופן יזום כמה סביר לו להוציא בכל קטגוריה וכמה כדאי לו לחסוך, בהתבסס אך ורק על הנתונים האמיתיים שסופקו לך.
+לכל הודעה מהמשתמש יש בדיוק אחד מחמישה מצבים אפשריים:
 1. המשתמש מתאר תנועה כספית חד-פעמית (הכנסה או הוצאה) שהוא רוצה לרשום עכשיו.
 2. המשתמש מתאר משהו **קבוע/חוזר על עצמו** — מנוי, שכר דירה, משכורת חודשית, תשלום קבוע כלשהו — לא תשלום בודד אלא מחויבות שחוזרת כל חודש/שבוע.
-3. המשתמש שואל שאלה על הנתונים הפיננסיים שלו.
-4. חסר מידע קריטי כדי להשלים אחת מהאפשרויות לעיל (בעיקר סכום חסר).
+3. המשתמש מבקש **תקציב מומלץ / תכנון תקציב / ייעוץ פיננסי כללי** — למשל "תבנה לי תקציב", "כמה כדאי לי לחסוך", "תהיה היועץ הפיננסי שלי", "תגיד לי כמה אני יכול להוציא על כל קטגוריה החודש".
+4. המשתמש שואל שאלה נקודתית על הנתונים הפיננסיים שלו (כולל "כמה נשאר לי להוציא על X החודש").
+5. חסר מידע קריטי כדי להשלים אחת מהאפשרויות לעיל (בעיקר סכום חסר).
 
-הקשר נתונים עדכני על מצבו הפיננסי של המשתמש (JSON) — אלה כל הנתונים שיש לך, אסור להמציא נתונים שלא מופיעים כאן:
+הקשר נתונים עדכני על מצבו הפיננסי של המשתמש (JSON) — אלה כל הנתונים שיש לך, אסור להמציא נתונים שלא מופיעים כאן. categorySpendingGuide הוא הכלי המרכזי שלך לייעוץ: לכל קטגוריה הוא מראה budgetMonthly (התקציב שכבר הוגדר, אם הוגדר), spentThisMonth (כמה כבר הוצא החודש), avgMonthlyLast3 (ממוצע הוצאה חודשי אמיתי ב-3 החודשים המלאים האחרונים — כבר כולל בתוכו הוראות קבע פעילות בקטגוריה, אם יש, כדי שגם מנוי חדש בלי היסטוריה ישתקלל נכון), recurringMonthlyCommitment (סך הוראות הקבע הפעילות בקטגוריה, מנורמל לחודש), pendingRecurringThisMonth (מתוך recurringMonthlyCommitment — הסכום שעדיין לא ירד החודש כי מועד החיוב עוד לא הגיע, אבל כבר בטוח שירד), remainingThisMonth ו-suggestedDailyRemaining (רק אם יש תקציב — remainingThisMonth כבר מפחית גם את pendingRecurringThisMonth, כלומר הוא "כמה באמת עוד חופשי לך להוציא" ולא רק תקציב פחות מה שכבר נרשם):
 ${JSON.stringify(context)}
 
-עליך להחזיר תמיד ורק אובייקט JSON תקני יחיד, בלי שום טקסט מסביב, באחד מארבעת המבנים הבאים בדיוק:
-{"intent":"add_transaction","transaction":{"type":"income","amount":0,"category":"","note":"","date":"YYYY-MM-DD"},"recurring":null,"message":""}
-{"intent":"add_recurring","transaction":null,"recurring":{"name":"","type":"income","amount":0,"category":"","frequency":"monthly","startDate":"YYYY-MM-DD"},"message":""}
-{"intent":"answer","transaction":null,"recurring":null,"message":""}
-{"intent":"clarify","transaction":null,"recurring":null,"message":""}
+עליך להחזיר תמיד ורק אובייקט JSON תקני יחיד, בלי שום טקסט מסביב, באחד מחמשת המבנים הבאים בדיוק:
+{"intent":"add_transaction","transaction":{"type":"income","amount":0,"category":"","note":"","date":"YYYY-MM-DD"},"recurring":null,"budgetPlan":null,"message":""}
+{"intent":"add_recurring","transaction":null,"recurring":{"name":"","type":"income","amount":0,"category":"","frequency":"monthly","startDate":"YYYY-MM-DD"},"budgetPlan":null,"message":""}
+{"intent":"budget_plan","transaction":null,"recurring":null,"budgetPlan":{"categories":[{"category":"","suggestedMonthly":0,"reason":""}],"suggestedMonthlySavings":0,"savingsReason":""},"message":""}
+{"intent":"answer","transaction":null,"recurring":null,"budgetPlan":null,"message":""}
+{"intent":"clarify","transaction":null,"recurring":null,"budgetPlan":null,"message":""}
 
 כללים:
 - "message" הוא תמיד טקסט קצר, טבעי וידידותי בעברית שיוצג למשתמש כפי שהוא (אישור, הסבר, תשובה, או בקשת הבהרה) — לעולם לא לחזור בו על מבנה ה-JSON.
 - add_transaction: תנועה חד-פעמית שכבר קרתה או קורית עכשיו. category חייב להיות אחת מהקטגוריות הקיימות בהקשר (בהתאם ל-type), אלא אם ממש אין שום התאמה סבירה — אז אפשר להציע שם קטגוריה קצר וברור חדש. אם type לא ברור: תיאור של קנייה/תשלום/הוצאת כסף = "expense", תיאור של קבלת משכורת/כסף/מתנה בכסף = "income". date בברירת מחדל הוא today מההקשר, אלא אם המשתמש ציין תאריך אחר במפורש. amount הוא מספר בלבד ויכול לכלול אגורות/שברים (למשל 13.9 או 25.5) — אל תעגל אותו לשלם.
 - add_recurring: כשהמשתמש מתאר משהו שחוזר על עצמו באופן קבוע (מילות מפתח כמו "כל חודש", "כל שבוע", "מנוי", "משכורת חודשית", "קבוע", "שכר דירה"). name הוא שם קצר וברור (למשל "נטפליקס", "שכר דירה", "משכורת"). frequency הוא "monthly" כברירת מחדל, או "weekly" רק אם המשתמש ציין משהו שבועי במפורש. startDate בברירת מחדל הוא today מההקשר. ההבחנה מ-add_transaction: אם המשתמש מתאר תשלום בודד שכבר קרה — add_transaction. אם הוא מתאר מחויבות חוזרת/עתידית שצריכה לחזור על עצמה אוטומטית — add_recurring.
+- budget_plan: כשהמשתמש מבקש תכנון/המלצת תקציב או ייעוץ כללי (לא שאלה נקודתית על קטגוריה אחת). בנה categories רק לקטגוריות הוצאה שיש להן נתונים אמיתיים ב-categorySpendingGuide (avgMonthlyLast3 גדול מ-0, או שכבר יש להן budgetMonthly). suggestedMonthly לכל קטגוריה: אם יש avgMonthlyLast3 השתמש בו כבסיס (אפשר לעגל לסכום נוח, ולהתחשב אם spentThisMonth כבר חורג ממנו); אם אין היסטוריה אבל יש budgetMonthly קיים — אפשר להשאיר אותו כמו שהוא או להציע שיפור קל. suggestedMonthly לעולם לא יכול להיות נמוך מ-recurringMonthlyCommitment של אותה קטגוריה (הוראת קבע היא מחויבות ודאית) — אם avgMonthlyLast3 גבוה מ-recurringMonthlyCommitment (יש גם הוצאות משתנות בקטגוריה מעבר להוראת הקבע), ציין זאת ב-reason. reason הוא משפט קצר שמסביר למה (למשל "כך הוצאת בממוצע ב-3 החודשים האחרונים, כולל הוראת הקבע"). suggestedMonthlySavings: avgMonthlyIncomeLast3CompletedMonths פחות סך ה-suggestedMonthly של כל הקטגוריות (לא פחות מ-0), עם savingsReason קצר שמסביר את החישוב. אם אין מספיק היסטוריה (avgMonthlyIncomeLast3CompletedMonths הוא 0 וגם אין קטגוריות עם נתונים) — עבור ל-clarify והסבר שצריך עוד נתוני הוצאות/הכנסות כדי לבנות תקציב אמין.
 - clarify: אם חסר סכום או שאי אפשר להבין באופן סביר מה המשתמש רוצה — אל תנחש, בקש בעדינות דרך "message".
-- answer: כשהמשתמש שואל שאלה ולא מתאר תנועה/הוראת קבע חדשה. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש. כששואלים "כמה יש לי" / "מה היתרה שלי" וכדומה — התשובה הנכונה היא תמיד currentBalanceEstimate (זה בדיוק המספר שמוצג לו בדשבורד תחת "יתרה כוללת"), לא totalBalanceFromTransactions לבדו.
+- answer: כשהמשתמש שואל שאלה נקודתית ולא מתאר תנועה/הוראת קבע/מבקש תקציב מלא. ענה בקצרה ובענייניות תוך הסתמכות אך ורק על הנתונים בהקשר שסופק. אם אין מספיק נתונים לענות בביטחון, אמור זאת בכנות ב-"message" במקום לנחש. כששואלים "כמה יש לי" / "מה היתרה שלי" וכדומה — התשובה הנכונה היא תמיד currentBalanceEstimate (זה בדיוק המספר שמוצג לו בדשבורד תחת "יתרה כוללת"), לא totalBalanceFromTransactions לבדו. כששואלים "כמה נשאר לי להוציא על X" — חפש את הקטגוריה ב-categorySpendingGuide והשתמש ב-remainingThisMonth ו-suggestedDailyRemaining (אם יש) — אלה כבר מביאים בחשבון תשלומי הוראת קבע שעוד לא ירדו החודש, ואם pendingRecurringThisMonth בקטגוריה גדול מ-0 כדאי לציין את זה בקצרה ("מתוכם X עוד ירדו החודש בהוראת קבע"); אם אין לקטגוריה תקציב מוגדר, אמור זאת ותציע avgMonthlyLast3 כהערכה בלבד, לא כמספר מדויק.
 - לעולם אל תמציא סכומים, תאריכים או נתונים שלא נמצאים בהקשר שסופק.`;
 }
 
@@ -4344,6 +4546,7 @@ async function handleAssistantSend(rawText) {
     let replyText = (result && result.message) || '';
     let pendingTx = null;
     let recurring = null;
+    let budgetPlan = null;
     if (result && result.intent === 'add_transaction' && result.transaction) {
       const t = result.transaction;
       const amount = Number(t.amount);
@@ -4375,10 +4578,33 @@ async function handleAssistantSend(rawText) {
       } else if (!replyText) {
         replyText = 'לא הצלחתי לזהות סכום תקין להוראת הקבע — אפשר לפרט שוב עם סכום ברור?';
       }
+    } else if (result && result.intent === 'budget_plan' && result.budgetPlan) {
+      const bp = result.budgetPlan;
+      // Only ever propose budgets for categories that already exist — this stays a bulk-apply
+      // of numbers onto the existing budget system, never a way for the model to invent new
+      // categories behind the scenes.
+      const validCategories = (Array.isArray(bp.categories) ? bp.categories : [])
+        .map(c => ({
+          category: (c && c.category || '').toString().trim(),
+          suggestedMonthly: Number(c && c.suggestedMonthly),
+          reason: (c && c.reason || '').toString().trim()
+        }))
+        .filter(c => c.category && state.categories.expense.includes(c.category) && !isNaN(c.suggestedMonthly) && c.suggestedMonthly > 0);
+      const suggestedSavings = Number(bp.suggestedMonthlySavings);
+      if (validCategories.length > 0) {
+        budgetPlan = {
+          categories: validCategories,
+          suggestedMonthlySavings: (!isNaN(suggestedSavings) && suggestedSavings > 0) ? r2(suggestedSavings) : 0,
+          savingsReason: (bp.savingsReason || '').toString().trim()
+        };
+        if (!replyText) replyText = 'הכנתי הצעת תקציב חודשי לפי ההיסטוריה שלך — אפשר לאשר את כל ההצעה (✓) או לבטל (✗) למטה.';
+      } else if (!replyText) {
+        replyText = 'אין לי עדיין מספיק היסטוריית הוצאות כדי לבנות תקציב אמין — תרשום כמה תנועות נוספות ותנסה שוב בעוד כמה ימים.';
+      }
     }
     if (!replyText) replyText = 'קיבלתי.';
     messages = loadAssistantChat();
-    messages.push({ id: uid(), role: 'model', text: replyText, pendingTx, recurring });
+    messages.push({ id: uid(), role: 'model', text: replyText, pendingTx, recurring, pendingBudgetPlan: budgetPlan });
     saveAssistantChat(messages);
   } catch (err) {
     messages = loadAssistantChat();
