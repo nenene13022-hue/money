@@ -1,15 +1,33 @@
 /* Service worker for כספית — only used when the app is hosted online (e.g. GitHub Pages).
    It is never registered when the file is opened directly via file:// (see app.js), so it
-   has zero effect on the standalone double-click version of the app. */
+   has zero effect on the standalone double-click version of the app.
+   Chart.js, SheetJS and Heebo are vendored under ./vendor and precached here so the app
+   shell, charts, Excel export and Hebrew font work offline after the first successful load. */
 
-const CACHE_NAME = 'kaspit-cache-v1';
-const APP_SHELL = ['./', './index.html'];
+const CACHE_NAME = 'kaspit-cache-v2';
+const PRECACHE = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './favicon.png',
+  './apple-touch-icon.png',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/icon-maskable-192.png',
+  './icons/icon-maskable-512.png',
+  './vendor/chart.umd.min.js',
+  './vendor/xlsx.full.min.js',
+  './vendor/fonts/heebo.css',
+  './vendor/fonts/heebo-hebrew.woff2',
+  './vendor/fonts/heebo-latin.woff2',
+  './vendor/fonts/heebo-latin-ext.woff2',
+  './vendor/fonts/heebo-math.woff2',
+  './vendor/fonts/heebo-symbols.woff2'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL))
-      .catch(() => {})
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE))
   );
   self.skipWaiting();
 });
@@ -23,24 +41,43 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Stale-while-revalidate: serve instantly from cache when available, and refresh the
-// cache in the background from the network. Falls back to cache if the network fails
-// (offline), which is what makes the app usable without a connection after first load.
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || networkFetch;
+async function cacheFirstWithRefresh(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  const network = fetch(request)
+    .then((response) => {
+      if (response && response.status === 200) {
+        cache.put(request, response.clone());
+      }
+      return response;
     })
-  );
+    .catch(() => cached);
+  return cached || network;
+}
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  let url;
+  try { url = new URL(request.url); } catch (e) { return; }
+  if (url.origin !== self.location.origin) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(request);
+        const cache = await caches.open(CACHE_NAME);
+        cache.put('./index.html', response.clone());
+        return response;
+      } catch (e) {
+        return (await caches.match('./index.html'))
+          || (await caches.match('./'))
+          || Response.error();
+      }
+    })());
+    return;
+  }
+
+  event.respondWith(cacheFirstWithRefresh(request));
 });
