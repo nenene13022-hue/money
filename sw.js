@@ -4,7 +4,7 @@
    Chart.js, SheetJS and Heebo are vendored under ./vendor and precached here so the app
    shell, charts, Excel export and Hebrew font work offline after the first successful load. */
 
-const CACHE_NAME = 'kaspit-cache-v2';
+const CACHE_NAME = 'kaspit-cache-v3';
 const PRECACHE = [
   './',
   './index.html',
@@ -17,6 +17,9 @@ const PRECACHE = [
   './icons/icon-maskable-512.png',
   './vendor/chart.umd.min.js',
   './vendor/xlsx.full.min.js',
+  './firebase-config.js',
+  './cloud-merge.js',
+  './firebase-sync.js',
   './vendor/fonts/heebo.css',
   './vendor/fonts/heebo-hebrew.woff2',
   './vendor/fonts/heebo-latin.woff2',
@@ -62,6 +65,20 @@ self.addEventListener('fetch', (event) => {
   let url;
   try { url = new URL(request.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;
+
+  // Always prefer a fresh Firebase config so a pasted key is picked up on refresh.
+  if (url.pathname.endsWith('/firebase-config.js')) {
+    event.respondWith(
+      fetch(request).then((response) => {
+        if (response && response.status === 200) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(request))
+    );
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {

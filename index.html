@@ -1318,6 +1318,32 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 }
 .tx-card-top, .tx-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .tx-card-main { font-weight: 650; }
+.tx-author {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; overflow: hidden;
+  background: rgba(108,123,255,0.2); color: var(--primary);
+  font-size: 11px; font-weight: 800; flex-shrink: 0; vertical-align: middle;
+}
+.tx-author img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cloud-sync-indicator {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 10px; background: var(--bg-elevated);
+}
+.cloud-sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.cloud-sync-indicator.ok .cloud-sync-dot { background: var(--income); }
+.cloud-sync-indicator.pending .cloud-sync-dot { background: #ffb547; }
+.cloud-sync-indicator.err .cloud-sync-dot { background: var(--expense); }
+.invite-code {
+  font-size: 28px; font-weight: 800; letter-spacing: 0.28em;
+  text-align: center; margin: 8px 0 12px; direction: ltr;
+}
+.cloud-member { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+@media (max-width: 720px) {
+  .topbar .cloud-sync-label { display: none; }
+  .topbar .cloud-sync-indicator { padding: 6px; }
+}
 .tx-card-meta { color: var(--text-dim); font-size: 12.5px; }
 
 .budget-alert-short { display: none; }
@@ -1449,6 +1475,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
     <div class="mobile-topbar">
       <button id="mobileMenuBtn" class="icon-btn" data-icon="menu" aria-label="תפריט"></button>
       <span class="brand-name mobile-brand" id="mobileBrandBtn" role="button" tabindex="0" title="חזרה לדשבורד"><span class="brand-icon" data-icon="wallet"></span> כספית</span>
+      <span class="cloud-sync-indicator" data-cloud-indicator hidden><span class="cloud-sync-dot"></span><span class="cloud-sync-label"></span></span>
       <button class="icon-btn" id="mobileAddBtn" data-icon="plus" aria-label="הוספת תנועה"></button>
     </div>
 
@@ -1474,6 +1501,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <p class="subtitle" id="pageSubtitle">סקירה כללית של המצב הכלכלי שלך</p>
       </div>
       <div class="topbar-actions">
+        <span class="cloud-sync-indicator" data-cloud-indicator hidden><span class="cloud-sync-dot"></span><span class="cloud-sync-label"></span></span>
         <label class="visually-hidden" for="accountFilter">חשבון</label>
         <select id="accountFilter" class="select-month"></select>
         <label class="visually-hidden" for="monthFilter">תקופה</label>
@@ -1866,6 +1894,14 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
     <!-- SETTINGS -->
     <section class="page" id="page-settings">
+
+      <h4 class="settings-section-title" id="cloudSyncHeading" hidden>שיתוף בית</h4>
+      <div class="card" id="cloudSyncCard" hidden>
+        <div class="card-header">
+          <h3><span data-icon="repeat" class="icon-xs"></span> פנקס משותף</h3>
+        </div>
+        <div id="cloudSyncBody"></div>
+      </div>
 
       <h4 class="settings-section-title">יתרה בפועל</h4>
       <div class="card balance-checkin-card" id="balanceCheckinCard">
@@ -2302,12 +2338,29 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
   </div>
 </div>
 
+<div class="modal-overlay" id="cloudChoiceOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="cloudChoiceTitle">
+    <div class="modal-header">
+      <h3 id="cloudChoiceTitle">שיתוף בית</h3>
+      <button type="button" class="modal-close" aria-label="סגירה" id="cloudChoiceClose" data-icon="close"></button>
+    </div>
+    <p class="hint" id="cloudChoiceText"></p>
+    <div class="form-actions">
+      <button type="button" class="btn-secondary" id="cloudChoiceSecondary">ביטול</button>
+      <button type="button" class="btn-primary" id="cloudChoicePrimary">אישור</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
 <div id="printReportRoot" class="print-report"></div>
 
 <script src="vendor/chart.umd.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="cloud-merge.js"></script>
+<script src="firebase-sync.js"></script>
 <script>
 /* ============================================================
    כספית — ניהול הכנסות והוצאות
@@ -2419,6 +2472,7 @@ const DEFAULT_STATE = () => ({
 });
 
 let state = DEFAULT_STATE();
+function kaspitReadState() { return state; }
 let currentPage = 'dashboard';
 let trendChartInstance = null;
 let categoryChartInstance = null;
@@ -2520,6 +2574,9 @@ async function persistState(seq) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     }
     // if pinEnabled but no key yet, skip writing rather than store plaintext while a lock is active.
+    if (window.kaspitCloud && window.kaspitCloud.enabled && typeof window.kaspitCloud.onLocalSave === 'function' && !window.kaspitCloud.isApplying()) {
+      window.kaspitCloud.onLocalSave();
+    }
   } catch (err) {
     notifySaveFailure(err);
   }
@@ -2868,7 +2925,7 @@ function txCardHtml(t) {
     : '';
   return `<article class="tx-card">
     <div class="tx-card-top">
-      <span class="badge ${t.type}">${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</span>
+      <span class="badge ${t.type}">${txAuthorHtml(t)}${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</span>
       <span class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '−'}${formatCurrency(t.amount)}</span>
     </div>
     <div class="tx-card-main">${t.type === 'expense' ? catIconHtml(t.category) : ''}${escapeHtml(t.category)}</div>
@@ -3128,17 +3185,22 @@ function generateRecurringTransactions() {
 
     let guard = 0;
     while (cursor <= today && guard < 600) {
-      state.transactions.push({
-        id: uid(),
-        type: r.type,
-        amount: r.amount,
-        category: r.category,
-        date: toISO(cursor),
-        note: `${r.name} (הוראת קבע)`,
-        recurringId: r.id,
-        accountId: r.accountId || DEFAULT_ACCOUNT_ID
-      });
-      r.lastGenerated = toISO(cursor);
+      const iso = toISO(cursor);
+      const deterministicId = `rec_${r.id}_${iso}`;
+      const already = state.transactions.some(t => t.id === deterministicId || (t.recurringId === r.id && t.date === iso));
+      if (!already) {
+        state.transactions.push({
+          id: deterministicId,
+          type: r.type,
+          amount: r.amount,
+          category: r.category,
+          date: iso,
+          note: `${r.name} (הוראת קבע)`,
+          recurringId: r.id,
+          accountId: r.accountId || DEFAULT_ACCOUNT_ID
+        });
+      }
+      r.lastGenerated = iso;
       changed = true;
       cursor = r.frequency === 'monthly' ? addMonthsClamp(cursor, 1, targetDay) : addDays(cursor, 7);
       guard++;
@@ -3866,7 +3928,7 @@ function renderRecentTx() {
   el.innerHTML = recent.map(t => `
     <div class="tx-row-mini">
       <div>
-        <div>${t.type === 'expense' ? catIconHtml(t.category) : ''}${escapeHtml(t.category)}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
+        <div>${txAuthorHtml(t)}${t.type === 'expense' ? catIconHtml(t.category) : ''}${escapeHtml(t.category)}${t.note ? ' · ' + escapeHtml(t.note) : ''}</div>
         <div class="tx-meta">${formatDateDisplay(t.date)}</div>
       </div>
       <div class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '−'}${formatCurrency(t.amount)}</div>
@@ -3875,6 +3937,16 @@ function renderRecentTx() {
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function txAuthorHtml(t) {
+  if (!t || !t.createdByName) return '';
+  const name = escapeHtml(t.createdByName);
+  const initial = escapeHtml(String(t.createdByName).trim().charAt(0) || '?');
+  const photo = (typeof t.createdByPhoto === 'string' && t.createdByPhoto.indexOf('https://') === 0)
+    ? `<img src="${escapeHtml(t.createdByPhoto)}" alt="">`
+    : `<span>${initial}</span>`;
+  return `<span class="tx-author" title="נרשם על ידי ${name}">${photo}</span>`;
 }
 
 /* ---------------- Transactions page ---------------- */
@@ -3930,7 +4002,7 @@ function renderTransactionsPage() {
         <td><span class="badge ${t.type}">${t.type === 'income' ? 'הכנסה' : 'הוצאה'}</span></td>
         <td>${t.type === 'expense' ? catIconHtml(t.category) : ''}${escapeHtml(t.category)}</td>
         <td class="acct-col">${escapeHtml(accountName(t.accountId))}</td>
-        <td>${escapeHtml(t.note || '—')}${txHasReceipt(t) ? ` <button type="button" class="receipt-indicator" title="הצגת קבלה" aria-label="הצגת קבלה" onclick="openReceiptLightbox('${t.id}')">${icon('receipt', 'icon-xs')}</button>` : ''}</td>
+        <td>${txAuthorHtml(t)}${escapeHtml(t.note || '—')}${txHasReceipt(t) ? ` <button type="button" class="receipt-indicator" title="הצגת קבלה" aria-label="הצגת קבלה" onclick="openReceiptLightbox('${t.id}')">${icon('receipt', 'icon-xs')}</button>` : ''}</td>
         <td class="tx-amount ${t.type}">${t.type === 'income' ? '+' : '−'}${formatCurrency(t.amount)}</td>
         <td class="row-actions">
           <button type="button" title="עריכה" aria-label="עריכה" onclick="openTxModal('${t.id}')">${icon('edit')}</button>
@@ -5850,6 +5922,7 @@ function renderSettingsPage() {
   populateReportYearSelect();
   populateReportMonthSelect();
   renderPinSettingsCard();
+  if (window.kaspitCloud && typeof window.kaspitCloud.render === 'function') window.kaspitCloud.render();
 }
 
 /* ---------------- PIN settings UI ---------------- */
@@ -7263,6 +7336,9 @@ function handleJsonImport(file) {
 
 async function resetAllData() {
   if (!confirm('פעולה זו תמחק את כל הנתונים (תנועות, תקציבים, הוראות קבע, קטגוריות). להמשיך?')) return;
+  if (window.kaspitCloud && window.kaspitCloud.linked && window.kaspitCloud.linked()) {
+    if (!confirm('המכשיר מחובר לבית משותף. המחיקה תמחק גם את התנועות המשותפות אצל שניכם. להמשיך?')) return;
+  }
   const snapshot = JSON.parse(JSON.stringify(state));
   let receiptSnap = [];
   try { receiptSnap = await snapshotReceipts(); } catch (err) { console.error(err); }
@@ -7801,6 +7877,15 @@ async function finishInit() {
   checkWhatsNew();
   checkMonthlySummaryCard();
   goToPage('dashboard');
+  if (window.kaspitCloud && window.kaspitCloud.ready) {
+    try {
+      await window.kaspitCloud.ready;
+      if (window.kaspitCloud.enabled && typeof window.kaspitCloud.start === 'function') await window.kaspitCloud.start();
+    } catch (err) {
+      console.error(err);
+      toast('הסנכרון לא עלה. הנתונים נשארים במכשיר.');
+    }
+  }
 }
 
 /* ---------------- Mobile: edge-swipe to open the sidebar menu ----------------
