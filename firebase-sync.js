@@ -15,7 +15,8 @@
     ready: Promise.resolve(),
     start: function () {},
     render: function () {},
-    onLocalSave: function () {}
+    onLocalSave: function () {},
+    noteLocalEdit: function () {}
   };
   window.kaspitCloud = cloud;
 
@@ -52,6 +53,10 @@
       }
     }
     auth.languageCode = 'he';
+    const emulator = (typeof window !== 'undefined' && window.KASPIT_FIREBASE_EMULATORS) || null;
+    if (emulator && emulator.auth) {
+      authMod.connectAuthEmulator(auth, emulator.auth, { disableWarnings: true });
+    }
     const provider = new authMod.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -66,6 +71,23 @@
       } catch (err2) {
         db = fs.getFirestore(app);
       }
+    }
+    if (emulator && emulator.firestoreHost) {
+      fs.connectFirestoreEmulator(db, emulator.firestoreHost, emulator.firestorePort || 8080);
+    }
+    if (emulator && emulator.auth) {
+      cloud.e2eSignIn = async function (email, password) {
+        try {
+          await authMod.signInWithEmailAndPassword(auth, email, password);
+        } catch (err) {
+          const code = err && err.code;
+          if (code === 'auth/user-not-found' || code === 'auth/invalid-credential' || code === 'auth/invalid-login-credentials') {
+            await authMod.createUserWithEmailAndPassword(auth, email, password);
+            return;
+          }
+          throw err;
+        }
+      };
     }
 
     let user = null;
@@ -87,6 +109,10 @@
     let sawRec = false;
     let sawShared = false;
     let localSharedStamp = 0;
+    let sharedDirty = false;
+    let sharedBaseline = null;
+    let editGen = 0;
+    let applyQueued = false;
     let fromCache = false;
     let hasPendingWrites = false;
     let wired = false;
@@ -99,6 +125,7 @@
     cloud.start = start;
     cloud.render = render;
     cloud.onLocalSave = onLocalSave;
+    cloud.noteLocalEdit = noteLocalEdit;
 
     function loadPrivate() {
       try { return new Set(JSON.parse(localStorage.getItem(PRIVATE_KEY) || '[]')); }
@@ -464,18 +491,43 @@
       render();
     }
 
-    function applySharedFields(s, shared, force) {
+    function noteLocalEdit() {
+      if (!householdId || !user || sharedBaseline === null) return;
+      const sig = merge.sharedSignature(merge.sharedFromState(readState(), { uid: user.uid }));
+      if (sig === sharedBaseline) return;
+      editGen++;
+      sharedDirty = true;
+      localSharedStamp = Date.now();
+    }
+
+    function writeSharedOnto(s, shared) {
       if (!shared) return;
-      if (!force && localSharedStamp && (shared.updatedAt || 0) < localSharedStamp) return;
       if (shared.categories) s.categories = shared.categories;
       if ('budgets' in shared) s.budgets = shared.budgets || {};
       if (shared.accounts && shared.accounts.length) s.accounts = shared.accounts;
       if (shared.savingsGoals) s.savingsGoals = shared.savingsGoals;
       if (shared.quickAdds) s.quickAdds = shared.quickAdds;
-      if (shared.balanceCheckins) s.balanceCheckins = shared.balanceCheckins;
+      if ('balanceCheckins' in shared) s.balanceCheckins = shared.balanceCheckins || [];
       if (shared.assistantSuggestions && shared.assistantSuggestions.length) s.assistantSuggestions = shared.assistantSuggestions;
       if (shared.envelopeAdjustments) s.envelopeAdjustments = shared.envelopeAdjustments;
-      localSharedStamp = shared.updatedAt || localSharedStamp;
+    }
+
+    function applySharedFields(s, shared, force) {
+      if (!shared) return false;
+      const decision = merge.reconcileShared({
+        local: merge.sharedFromState(s, { uid: user && user.uid }),
+        remote: shared,
+        dirty: force ? false : sharedDirty,
+        localStamp: force ? 0 : localSharedStamp,
+        force: !!force
+      });
+      writeSharedOnto(s, decision.shared);
+      if (!force) {
+        sharedDirty = decision.dirty;
+        if (decision.stamp) localSharedStamp = decision.stamp;
+        if (!sharedDirty) sharedBaseline = merge.sharedSignature(merge.sharedFromState(s, { uid: user && user.uid }));
+      }
+      return decision.changed;
     }
 
     async function loadCollection(hid, name) {
@@ -502,7 +554,10 @@
       if (!householdId || !user) return;
       if (pushing) { pushAgain = true; return; }
       pushing = true;
+      const genAtStart = editGen;
       setStatus();
+      let pushedOk = false;
+      let writtenAt = 0;
       try {
         const s = readState();
         const me = profile();
@@ -558,6 +613,7 @@
         });
 
         const shared = merge.sharedFromState(s, me);
+        writtenAt = shared.updatedAt || 0;
         const sharedChanged = !remoteShared || sharedKey(remoteShared) !== sharedKey(shared);
         if (sharedChanged) localSharedStamp = shared.updatedAt;
 
@@ -574,12 +630,23 @@
           ops.slice(i, i + 400).forEach(fn => fn(batch));
           await batch.commit();
         }
+        pushedOk = true;
       } catch (err) {
         console.error(err);
         toast('הסנכרון לענן נכשל. הנתונים נשמרו במכשיר ויישלחו שוב כשיהיה חיבור.');
       } finally {
         pushing = false;
+        if (pushedOk && editGen === genAtStart) {
+          sharedDirty = false;
+          const s = readState();
+          sharedBaseline = merge.sharedSignature(merge.sharedFromState(s, profile()));
+          if (writtenAt) localSharedStamp = writtenAt;
+        }
         setStatus();
+        if (applyQueued) {
+          applyQueued = false;
+          try { await applyRemote(); } catch (err) { console.error(err); }
+        }
         if (pushAgain) {
           pushAgain = false;
           await pushEverything();
@@ -649,12 +716,12 @@
 
     async function applyRemote() {
       if (!sawTx || !sawRec || !sawShared) return;
-      if (pushing) return;
+      if (pushing) { applyQueued = true; return; }
       const s = readState();
       const before = JSON.stringify({
-        t: (s.transactions || []).map(t => [t.id, t.updatedAt, t.amount, t.note, t.category, t.date]),
+        t: (s.transactions || []).map(t => [t.id, t.updatedAt, t.amount, t.note, t.category, t.date, t.createdAt || 0]),
         r: (s.recurring || []).map(r => [r.id, r.updatedAt, r.amount, r.lastGenerated, r.active]),
-        b: s.budgets
+        shared: merge.sharedSignature(merge.sharedFromState(s, { uid: user && user.uid }))
       });
       s.transactions = merge.reconcileTransactions({
         local: s.transactions || [],
@@ -676,16 +743,18 @@
       pendingRecDeletes.forEach(id => { if (!remoteRec.has(id)) pendingRecDeletes.delete(id); });
       if (remoteShared) applySharedFields(s, remoteShared, false);
       const after = JSON.stringify({
-        t: (s.transactions || []).map(t => [t.id, t.updatedAt, t.amount, t.note, t.category, t.date]),
+        t: (s.transactions || []).map(t => [t.id, t.updatedAt, t.amount, t.note, t.category, t.date, t.createdAt || 0]),
         r: (s.recurring || []).map(r => [r.id, r.updatedAt, r.amount, r.lastGenerated, r.active]),
-        b: s.budgets
+        shared: merge.sharedSignature(merge.sharedFromState(s, { uid: user && user.uid }))
       });
       if (before === after) {
         setStatus();
+        if (sharedDirty) onLocalSave();
         return;
       }
       await persistLocal();
       if (typeof window.renderAll === 'function') window.renderAll();
+      if (sharedDirty) onLocalSave();
       setStatus();
     }
 

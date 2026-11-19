@@ -67,7 +67,7 @@
 
   function txForCloud(t, user) {
     const now = Date.now();
-    return {
+    const out = {
       id: t.id,
       type: t.type === 'income' ? 'income' : 'expense',
       amount: Number(t.amount) || 0,
@@ -82,6 +82,8 @@
       updatedAt: t.updatedAt || now,
       updatedBy: t.updatedBy || (user && user.uid) || null
     };
+    if (Number(t.createdAt)) out.createdAt = Number(t.createdAt);
+    return out;
   }
 
   function reconcileTransactions(opts) {
@@ -207,13 +209,106 @@
       accounts: mergeById(localState && localState.accounts, remote.accounts),
       savingsGoals: mergeById(localState && localState.savingsGoals, remote.savingsGoals),
       quickAdds: mergeById(localState && localState.quickAdds, remote.quickAdds),
-      balanceCheckins: mergeById(localState && localState.balanceCheckins, remote.balanceCheckins),
+      balanceCheckins: mergeCheckins(localState && localState.balanceCheckins, remote.balanceCheckins),
       assistantSuggestions: mergeById(
         localState && localState.assistantSuggestions,
         remote.assistantSuggestions,
         item => String(item && item.text || '').trim()
       ),
       envelopeAdjustments: mergeEnvelope(localState && localState.envelopeAdjustments, remote.envelopeAdjustments)
+    };
+  }
+
+  function checkinTime(item) {
+    return Number(item && (item.updatedAt || item.createdAt)) || 0;
+  }
+
+  // Union by id. A newer updatedAt wins, including a delete tombstone (deleted: true).
+  // An item that exists on only one side is kept, so a stale household snapshot cannot
+  // drop a balance the person just saved and has not uploaded yet.
+  function mergeCheckins(localList, remoteList) {
+    const byId = new Map();
+    function take(item) {
+      if (!item || !item.id) return;
+      const prev = byId.get(item.id);
+      if (!prev || checkinTime(item) >= checkinTime(prev)) byId.set(item.id, Object.assign({}, item));
+    }
+    (remoteList || []).forEach(take);
+    (localList || []).forEach(take);
+    return [...byId.values()];
+  }
+
+  function sharedView(state) {
+    const s = state || {};
+    return {
+      categories: s.categories || { income: [], expense: [] },
+      budgets: s.budgets || {},
+      accounts: s.accounts || [],
+      savingsGoals: s.savingsGoals || [],
+      quickAdds: s.quickAdds || [],
+      balanceCheckins: s.balanceCheckins || [],
+      assistantSuggestions: s.assistantSuggestions || [],
+      envelopeAdjustments: s.envelopeAdjustments || {}
+    };
+  }
+
+  function stable(value) {
+    if (Array.isArray(value)) return value.map(stable);
+    if (value && typeof value === 'object') {
+      const out = {};
+      Object.keys(value).sort().forEach(key => {
+        if (key === 'updatedAt' || key === 'updatedBy') return;
+        out[key] = stable(value[key]);
+      });
+      return out;
+    }
+    return value;
+  }
+
+  function sharedSignature(shared) {
+    return JSON.stringify(stable(sharedView(shared)));
+  }
+
+  // Decide which shared household fields survive a Firestore snapshot.
+  // Local unpushed edits (dirty, or a newer local stamp) are not replaced.
+  // Balance check-ins are always merged, so either partner's starting balance sticks.
+  function reconcileShared(opts) {
+    const local = sharedView(opts && opts.local);
+    const remote = opts && opts.remote;
+    const dirty = !!(opts && opts.dirty);
+    const localStamp = Number(opts && opts.localStamp) || 0;
+    const force = !!(opts && opts.force);
+    if (!remote) return { shared: local, dirty: dirty, stamp: localStamp, changed: false };
+
+    const remoteStamp = Number(remote.updatedAt) || 0;
+    const localAhead = !force && (dirty || (localStamp > 0 && remoteStamp < localStamp));
+    const next = sharedView(local);
+    if (!localAhead) {
+      if (remote.categories) next.categories = remote.categories;
+      if ('budgets' in remote) next.budgets = remote.budgets || {};
+      if (remote.accounts && remote.accounts.length) next.accounts = remote.accounts;
+      if (remote.savingsGoals) next.savingsGoals = remote.savingsGoals;
+      if (remote.quickAdds) next.quickAdds = remote.quickAdds;
+      if (remote.assistantSuggestions && remote.assistantSuggestions.length) next.assistantSuggestions = remote.assistantSuggestions;
+      if (remote.envelopeAdjustments) next.envelopeAdjustments = remote.envelopeAdjustments;
+    }
+
+    const remoteCheckins = 'balanceCheckins' in remote ? remote.balanceCheckins : null;
+    if (force && remoteCheckins) {
+      next.balanceCheckins = remoteCheckins.map(item => Object.assign({}, item));
+    } else if (remoteCheckins) {
+      next.balanceCheckins = mergeCheckins(local.balanceCheckins, remoteCheckins);
+    }
+
+    const checkinSig = list => JSON.stringify(stable(list || []));
+    const keptLocalCheckin = !force && !!remoteCheckins && checkinSig(next.balanceCheckins) !== checkinSig(remoteCheckins);
+    const nextDirty = force ? false : (localAhead || keptLocalCheckin);
+    const changed = sharedSignature(local) !== sharedSignature(next);
+    return {
+      shared: next,
+      dirty: !!nextDirty,
+      stamp: Math.max(localStamp, remoteStamp),
+      changed
     };
   }
 
@@ -280,8 +375,11 @@
     mergeInitialTransactions,
     replaceTransactions,
     mergeById,
+    mergeCheckins,
     mergeShared,
     sharedFromState,
+    sharedSignature,
+    reconcileShared,
     recurringForCloud,
     browserBlocksRedirectSignIn,
     shouldFallbackToRedirect
