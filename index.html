@@ -1540,7 +1540,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <div class="stat-card total">
           <div class="stat-icon" data-icon="bank"></div>
           <div>
-            <div class="stat-label">יתרה כוללת (כל הזמנים)</div>
+            <div class="stat-label">יתרה עכשיו</div>
             <div class="stat-value" id="statTotal">₪0</div>
             <div class="stat-source-note" id="statTotalSource" hidden></div>
           </div>
@@ -1566,7 +1566,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 
       <div class="card">
         <div class="card-header">
-          <h3>יתרה כוללת לאורך זמן — 6 חודשים אחרונים</h3>
+          <h3>יתרה לאורך זמן — 6 חודשים אחרונים</h3>
         </div>
         <div class="chart-wrap" style="height:200px"><canvas id="netWorthChart" role="img" aria-label="גרף יתרה כוללת לאורך זמן"></canvas></div>
       </div>
@@ -1903,19 +1903,24 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <div id="cloudSyncBody"></div>
       </div>
 
-      <h4 class="settings-section-title">יתרה בפועל</h4>
+      <h4 class="settings-section-title">יתרה עכשיו</h4>
       <div class="card balance-checkin-card" id="balanceCheckinCard">
         <div class="card-header">
-          <h3><span data-icon="wallet" class="icon-xs"></span> כמה כסף יש לי בפועל</h3>
-          <button type="button" class="info-btn" data-tooltip="רישום ידני ופשוט של כמה כסף יש לך באמת (אחרי שסיפרת מזומן או בדקת את חשבון הבנק) — עצמאי מהחישוב האוטומטי שמבוסס על התנועות שרשמת. אפשר לעדכן בכל רגע שבא לך.">?</button>
+          <h3><span data-icon="wallet" class="icon-xs"></span> כמה כסף יש לי עכשיו</h3>
+          <button type="button" class="info-btn" data-tooltip="רושמים פעם אחת כמה כסף יש באמת נכון לתאריך. מהרגע הזה כל הכנסה מעלה את היתרה וכל הוצאה מורידה אותה. תנועות מלפני התאריך כבר כלולות בסכום ולא נספרות שוב. אפשר לעדכן את נקודת ההתחלה בכל זמן.">?</button>
         </div>
+        <p class="hint">זה הסכום שמופיע בדשבורד כ«יתרה עכשיו». אחרי השמירה הוא זז עם כל תנועה חדשה, גם אצל בן או בת הזוג אם הבית משותף.</p>
         <div id="balanceCheckinSummary"></div>
         <div class="balance-checkin-form">
-          <label class="visually-hidden" for="balanceCheckinAmount">סכום היתרה בפועל</label>
-          <input type="number" id="balanceCheckinAmount" step="1" placeholder="כמה כסף יש לך עכשיו (₪)">
-          <button type="button" class="btn-primary" id="balanceCheckinSaveBtn">שמירה</button>
+          <label class="visually-hidden" for="balanceCheckinAmount">כמה יש עכשיו בשקלים</label>
+          <input type="number" id="balanceCheckinAmount" step="0.01" placeholder="כמה יש עכשיו (₪)">
+          <label class="visually-hidden" for="balanceCheckinDate">נכון לתאריך</label>
+          <input type="text" class="date-input" id="balanceCheckinDate" dir="ltr" inputmode="numeric" placeholder="dd/mm/yyyy" autocomplete="off">
+          <label class="visually-hidden" for="balanceCheckinAccount">חשבון</label>
+          <select id="balanceCheckinAccount" hidden><option value="all">כל החשבונות</option></select>
+          <button type="button" class="btn-primary" id="balanceCheckinSaveBtn">עדכון היתרה</button>
         </div>
-        <button type="button" class="btn-link" id="balanceCheckinHistoryToggle">הצג היסטוריה</button>
+        <button type="button" class="btn-link" id="balanceCheckinHistoryToggle">הצג נקודות התחלה קודמות</button>
         <div id="balanceCheckinHistory" class="balance-checkin-history" hidden></div>
       </div>
 
@@ -2360,6 +2365,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="firebase-config.js"></script>
 <script src="cloud-merge.js"></script>
+<script src="balance-math.js"></script>
 <script src="firebase-sync.js"></script>
 <script>
 /* ============================================================
@@ -2872,7 +2878,7 @@ function confirmRecurringBackfill(r) {
 
 function balanceAnchorOffset() {
   const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-  return computeCurrentBalanceEstimate().amount - totalAll;
+  return computeCurrentBalanceEstimate('all').amount - totalAll;
 }
 
 function filtersAreActive() {
@@ -3197,7 +3203,8 @@ function generateRecurringTransactions() {
           date: iso,
           note: `${r.name} (הוראת קבע)`,
           recurringId: r.id,
-          accountId: r.accountId || DEFAULT_ACCOUNT_ID
+          accountId: r.accountId || DEFAULT_ACCOUNT_ID,
+          createdAt: Date.now()
         });
       }
       r.lastGenerated = iso;
@@ -3462,35 +3469,65 @@ function txInMonth(key) {
   return list.filter(t => monthKey(t.date) === key);
 }
 
-/* ---------------- Manual "actual balance" check-ins ----------------
-   A simple, independent way to jot down how much money you actually have (after
-   counting cash or checking the bank) whenever you feel like it — separate from the
-   automatic total calculated from logged transactions, which can drift if not every
-   transaction gets recorded. */
+/* ---------------- Starting balance ----------------
+   The number on the dashboard is "how much I have now". A check-in is that
+   amount at a moment. Income and expenses after that moment move it.
+   Transactions dated before the check-in day are already inside it. */
+
+function balanceInput() {
+  return {
+    transactions: state.transactions,
+    checkins: state.balanceCheckins || [],
+    today: todayISO()
+  };
+}
+
+function computeCurrentBalanceEstimate(accountId) {
+  const acc = accountId === undefined ? selectedAccountId() : accountId;
+  const result = window.KaspitBalance.currentBalance(Object.assign({ accountId: acc }, balanceInput()));
+  return {
+    amount: result.amount,
+    latestCheckin: result.anchor,
+    accountId: acc,
+    netSince: result.netSince,
+    incomeSince: result.incomeSince,
+    expenseSince: result.expenseSince
+  };
+}
+
+function balanceAtCutoff(accountId, cutoff) {
+  return window.KaspitBalance.balanceAtCutoff(Object.assign({ accountId, cutoff }, balanceInput()));
+}
 
 function renderBalanceCheckinCard() {
   const summaryEl = document.getElementById('balanceCheckinSummary');
   if (!summaryEl) return;
-  const checkins = state.balanceCheckins || [];
-  if (checkins.length === 0) {
-    summaryEl.innerHTML = '<p class="hint">עדיין לא רשמת כמה כסף יש לך בפועל. תספור ותרשום כל פעם שתרצה — זה נפרד לגמרי מהתנועות שאתה מזין.</p>';
+  const dateEl = document.getElementById('balanceCheckinDate');
+  if (dateEl && !dateEl.value) writeDateInput('balanceCheckinDate', todayISO());
+  const accountEl = document.getElementById('balanceCheckinAccount');
+  if (accountEl) {
+    const previous = accountEl.value || 'all';
+    const multiple = state.accounts.length > 1;
+    accountEl.hidden = !multiple;
+    accountEl.innerHTML = '<option value="all">כל החשבונות</option>' +
+      state.accounts.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.name)}</option>`).join('');
+    if ([...accountEl.options].some(o => o.value === previous)) accountEl.value = previous;
+  }
+
+  const live = computeCurrentBalanceEstimate('all');
+  if (!live.latestCheckin) {
+    summaryEl.innerHTML = `<p class="hint">עדיין אין נקודת התחלה. היתרה בדשבורד היא ${formatCurrency(live.amount)} לפי התנועות בלבד. רשום כאן כמה כסף יש עכשיו, ומכאן היא תעלה עם הכנסות ותרד עם הוצאות.</p>`;
     return;
   }
-  const sorted = [...checkins].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
-  const latest = sorted[0];
-  const daysAgo = Math.floor(daysSince(latest.date));
-  const whenText = daysAgo <= 0 ? 'היום' : daysAgo === 1 ? 'אתמול' : `לפני ${daysAgo} ימים`;
-
-  const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-  const diff = Number(latest.amount) - totalAll;
-  const diffHint = Math.abs(diff) >= 1
-    ? `<div class="hint">לפי התנועות שרשמת, היתרה המחושבת היא ${formatCurrency(totalAll)} — הפרש של ${formatCurrency(Math.abs(diff))} ${diff > 0 ? 'יותר ממה שרשמת בתנועות' : 'פחות ממה שרשמת בתנועות'}.</div>`
-    : `<div class="hint">זה תואם בדיוק ליתרה המחושבת מהתנועות שלך.</div>`;
-
+  const anchor = live.latestCheckin;
+  const sign = live.netSince >= 0 ? '+' : '−';
+  const accountLines = state.accounts.length > 1
+    ? `<div class="hint">לפי חשבון: ${state.accounts.map(a => `${escapeHtml(a.name)} ${formatCurrency(computeCurrentBalanceEstimate(a.id).amount)}`).join(' · ')}</div>`
+    : '';
   summaryEl.innerHTML = `
-    <div class="insight-kpi good">${formatCurrency(latest.amount)}</div>
-    <div class="hint">מה שספרת ${whenText} (${formatDateDisplay(latest.date)})</div>
-    ${diffHint}`;
+    <div class="insight-kpi good">${formatCurrency(live.amount)}</div>
+    <div class="hint">יתרה עכשיו. נקודת ההתחלה: ${formatCurrency(anchor.amount)} ב־${formatDateDisplay(anchor.date)}. מאז: ${sign}${formatCurrency(Math.abs(live.netSince))} (הכנסות ${formatCurrency(live.incomeSince)}, הוצאות ${formatCurrency(live.expenseSince)}).</div>
+    ${accountLines}`;
 }
 
 function renderBalanceCheckinHistory() {
@@ -3509,13 +3546,20 @@ function renderBalanceCheckinHistory() {
     </div>`).join('');
 }
 
-function addBalanceCheckin(amount) {
+function addBalanceCheckin(amount, date, accountId) {
   if (isNaN(amount)) { toast('נא להזין סכום תקין'); return; }
-  state.balanceCheckins.push({ id: uid(), date: todayISO(), amount });
+  const anchorDate = date || todayISO();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) { toast('תאריך לא תקין. השתמש בפורמט dd/mm/yyyy'); return; }
+  state.balanceCheckins.push({
+    id: uid(),
+    date: anchorDate,
+    amount: Math.round(Number(amount) * 100) / 100,
+    createdAt: Date.now(),
+    accountId: accountId || 'all'
+  });
   saveState();
-  renderBalanceCheckinCard();
-  renderBalanceCheckinHistory();
-  toast('נשמר!');
+  renderAll();
+  toast('היתרה עודכנה. מעכשיו היא תזוז עם ההכנסות וההוצאות.');
 }
 
 function deleteBalanceCheckin(id) {
@@ -3523,30 +3567,12 @@ function deleteBalanceCheckin(id) {
   if (idx === -1) return;
   const [removed] = state.balanceCheckins.splice(idx, 1);
   saveState();
-  renderBalanceCheckinCard();
-  renderBalanceCheckinHistory();
-  showUndoToast('הרישום נמחק', () => {
+  renderAll();
+  showUndoToast('נקודת ההתחלה נמחקה', () => {
     state.balanceCheckins.splice(idx, 0, removed);
     saveState();
-    renderBalanceCheckinCard();
-    renderBalanceCheckinHistory();
+    renderAll();
   });
-}
-
-// The dashboard's "יתרה כוללת" figure, kept live even when a manual balance check-in exists.
-// If the user has ever recorded "how much money I actually have" (Settings page), that's the
-// trusted anchor — but it shouldn't freeze at that one snapshot forever. Every income/expense
-// recorded *after* the check-in date still needs to move the number, otherwise it just goes
-// stale the moment you add a new transaction. Transactions dated on/before the check-in are
-// assumed to already be reflected in what the person counted, so only later ones are netted in.
-function computeCurrentBalanceEstimate() {
-  const totalAll = state.transactions.reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-  const latestCheckin = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date))[0];
-  if (!latestCheckin) return { amount: totalAll, latestCheckin: null };
-  const netSinceCheckin = state.transactions
-    .filter(t => t.date > latestCheckin.date)
-    .reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-  return { amount: Number(latestCheckin.amount) + netSinceCheckin, latestCheckin };
 }
 
 function renderDashboard() {
@@ -3556,13 +3582,18 @@ function renderDashboard() {
   const expense = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
   const balance = income - expense;
 
-  const { amount: displayTotal, latestCheckin } = computeCurrentBalanceEstimate();
+  const { amount: displayTotal, latestCheckin, netSince } = computeCurrentBalanceEstimate();
   const sourceNoteEl = document.getElementById('statTotalSource');
   if (latestCheckin) {
-    sourceNoteEl.textContent = `מהרישום הידני (${formatDateDisplay(latestCheckin.date)}) + תנועות מאז`;
+    const sign = netSince >= 0 ? '+' : '−';
+    sourceNoteEl.textContent = `מ־${formatCurrency(latestCheckin.amount)} ב־${formatDateDisplay(latestCheckin.date)} ${sign}${formatCurrency(Math.abs(netSince))} מאז`;
+    sourceNoteEl.hidden = false;
+  } else if (selectedAccountId() !== 'all') {
+    sourceNoteEl.textContent = 'אין נקודת התחלה לחשבון הזה — הסכום לפי התנועות שלו';
     sourceNoteEl.hidden = false;
   } else {
-    sourceNoteEl.hidden = true;
+    sourceNoteEl.textContent = 'לפי התנועות בלבד. אפשר לקבוע נקודת התחלה בהגדרות.';
+    sourceNoteEl.hidden = false;
   }
 
   animateStatValue('statIncome', income);
@@ -3675,22 +3706,16 @@ function last6MonthsSeries() {
 // every transaction ever recorded up to that point (not just a 6-month delta, so it reflects
 // actual account balance history). The final point uses today as its cutoff instead of month-end,
 // so the line always ends exactly where the dashboard's "יתרה כוללת" stat is right now.
-function netWorthSeries(monthsBack = 6) {
+function netWorthSeries(monthsBack = 6, accountId) {
   const now = new Date();
-  // Same anchor as the "יתרה כוללת" card. A manual balance check-in shifts the whole
-  // line so the last point is that balance plus transactions recorded after it,
-  // instead of a raw sum of every transaction from zero.
-  const offset = balanceAnchorOffset();
+  const acc = accountId === undefined ? selectedAccountId() : accountId;
   const points = [];
   for (let i = monthsBack - 1; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const isCurrent = i === 0;
     const cutoff = isCurrent ? todayISO() : toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0));
     const key = toISO(d).slice(0, 7);
-    const raw = state.transactions
-      .filter(t => t.date <= cutoff)
-      .reduce((s, t) => s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
-    points.push({ key, label: monthLabel(key).split(' ')[0], total: r2(raw + offset) });
+    points.push({ key, label: monthLabel(key).split(' ')[0], total: balanceAtCutoff(acc, cutoff) });
   }
   return points;
 }
@@ -4049,7 +4074,8 @@ function repeatLastTransaction() {
   if (!last) return;
   state.transactions.push({
     id: uid(), type: last.type, amount: Number(last.amount), category: last.category,
-    date: todayISO(), note: last.note || '', accountId: last.accountId || DEFAULT_ACCOUNT_ID, receipt: null
+    date: todayISO(), note: last.note || '', accountId: last.accountId || DEFAULT_ACCOUNT_ID, receipt: null,
+    createdAt: Date.now()
   });
   saveState();
   renderAll();
@@ -4062,7 +4088,7 @@ function instantAddFromQuick(id) {
   const accountId = selectedAccountId() !== 'all' ? selectedAccountId() : DEFAULT_ACCOUNT_ID;
   state.transactions.push({
     id: uid(), type: q.type, amount: Number(q.amount), category: q.category,
-    date: todayISO(), note: '', accountId, receipt: null
+    date: todayISO(), note: '', accountId, receipt: null, createdAt: Date.now()
   });
   saveState();
   renderAll();
@@ -4225,7 +4251,7 @@ function computeEmergencyFundStatus() {
   });
   const avgMonthlyNeeds = monthsWithData > 0 ? r2(needsSum / monthsWithData) : 0;
   const target = r2(avgMonthlyNeeds * EMERGENCY_FUND_TARGET_MONTHS);
-  const { amount: currentBalance } = computeCurrentBalanceEstimate();
+  const { amount: currentBalance } = computeCurrentBalanceEstimate('all');
   const monthsCovered = avgMonthlyNeeds > 0 ? r2(currentBalance / avgMonthlyNeeds) : null;
   const pct = target > 0 ? Math.max(0, Math.min(100, Math.round((currentBalance / target) * 100))) : null;
   return { avgMonthlyNeeds, target, currentBalance: r2(currentBalance), monthsCovered, pct };
@@ -5577,7 +5603,7 @@ function buildAssistantContext() {
   // Same figure shown as "יתרה כוללת" on the dashboard: the manual check-in (if any) netted
   // forward with every transaction recorded since, so the assistant's answer to "מה היתרה שלי"
   // always matches what the person sees on screen.
-  const currentBalanceEstimate = r2(computeCurrentBalanceEstimate().amount);
+  const currentBalanceEstimate = r2(computeCurrentBalanceEstimate().amount); // same number as the dashboard total for the account filter on screen
 
   // Average income/expense over completed months (excludes the current, still-partial one) —
   // the basis for a realistic monthly savings suggestion, rather than one that swings wildly
@@ -5778,7 +5804,7 @@ function applyAssistantTransaction(t) {
   const date = /^\d{4}-\d{2}-\d{2}$/.test((t && t.date) || '') ? t.date : todayISO();
   const note = ((t && t.note) || '').toString().trim();
   const id = uid();
-  state.transactions.push({ id, type, amount, category, date, note, accountId: DEFAULT_ACCOUNT_ID });
+  state.transactions.push({ id, type, amount, category, date, note, accountId: DEFAULT_ACCOUNT_ID, createdAt: Date.now() });
   saveState();
   renderAll();
   return { ok: true, id, type, amount, category, date, note };
@@ -6805,7 +6831,7 @@ function handleExcelImport(file) {
         }
 
         state.transactions.push({
-          id: uid(), type, amount: Math.abs(amount), category: rawCat, date, note, accountId
+          id: uid(), type, amount: Math.abs(amount), category: rawCat, date, note, accountId, createdAt: Date.now()
         });
         success++;
       });
@@ -6961,7 +6987,7 @@ function cancelSmartImport() {
 
 function confirmSmartImport() {
   if (!_pendingSmartImport || _pendingSmartImport.length === 0) return;
-  state.transactions.push(..._pendingSmartImport);
+  state.transactions.push(..._pendingSmartImport.map(t => Object.assign({}, t, { createdAt: t.createdAt || Date.now() })));
   const count = _pendingSmartImport.length;
   _pendingSmartImport = null;
   saveState();
@@ -7451,7 +7477,7 @@ function initEvents() {
       Object.assign(existing, tx);
       if (!tx.receiptId) delete existing.receiptId;
     } else {
-      const created = { id: uid(), ...tx };
+      const created = { id: uid(), createdAt: Date.now(), ...tx };
       if (!created.receiptId) delete created.receiptId;
       state.transactions.push(created);
     }
@@ -7650,8 +7676,12 @@ function initEvents() {
 
   document.getElementById('balanceCheckinSaveBtn').addEventListener('click', () => {
     const input = document.getElementById('balanceCheckinAmount');
-    addBalanceCheckin(parseFloat(input.value));
+    const date = readDateInput('balanceCheckinDate') || todayISO();
+    const accountEl = document.getElementById('balanceCheckinAccount');
+    const accountId = accountEl && !accountEl.hidden ? (accountEl.value || 'all') : 'all';
+    addBalanceCheckin(parseFloat(input.value), date, accountId);
     input.value = '';
+    writeDateInput('balanceCheckinDate', todayISO());
   });
   document.getElementById('balanceCheckinAmount').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); document.getElementById('balanceCheckinSaveBtn').click(); }
@@ -7660,7 +7690,7 @@ function initEvents() {
     const el = document.getElementById('balanceCheckinHistory');
     el.hidden = !el.hidden;
     if (!el.hidden) renderBalanceCheckinHistory();
-    document.getElementById('balanceCheckinHistoryToggle').textContent = el.hidden ? 'הצג היסטוריה' : 'הסתר היסטוריה';
+    document.getElementById('balanceCheckinHistoryToggle').textContent = el.hidden ? 'הצג נקודות התחלה קודמות' : 'הסתר נקודות התחלה קודמות';
   });
 
   document.getElementById('assistantSaveKeyBtn').addEventListener('click', () => {
