@@ -76,9 +76,16 @@ try {
   await assertSucceeds(setDoc(doc(bdb, 'households/h1/meta/shared'), {
     categories: { income: ['משכורת'], expense: ['מזון'] },
     budgets: { מזון: 200 },
+    balanceCheckins: [{
+      id: 'now', date: '2026-11-19', amount: 5000.5, createdAt: 10, updatedAt: 10,
+      accountId: 'all', deleted: false
+    }],
     updatedAt: 6,
     updatedBy: 'bob'
   }));
+  await assertSucceeds(setDoc(doc(adb, 'households/h1/transactions/tCreated'), tx('tCreated', 'alice', {
+    createdAt: 1500
+  })));
   await assertFails(getDoc(doc(sdb, 'households/h1/meta/shared')));
 
   await assertFails(setDoc(doc(bdb, 'inviteCodes/ZZZZZZ'), { householdId: 'h1' }));

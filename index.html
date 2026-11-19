@@ -1913,7 +1913,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
         <div id="balanceCheckinSummary"></div>
         <div class="balance-checkin-form">
           <label class="visually-hidden" for="balanceCheckinAmount">כמה יש עכשיו בשקלים</label>
-          <input type="number" id="balanceCheckinAmount" step="0.01" placeholder="כמה יש עכשיו (₪)">
+          <input type="text" id="balanceCheckinAmount" inputmode="decimal" dir="ltr" autocomplete="off" placeholder="כמה יש עכשיו (₪)">
           <label class="visually-hidden" for="balanceCheckinDate">נכון לתאריך</label>
           <input type="text" class="date-input" id="balanceCheckinDate" dir="ltr" inputmode="numeric" placeholder="dd/mm/yyyy" autocomplete="off">
           <label class="visually-hidden" for="balanceCheckinAccount">חשבון</label>
@@ -2060,7 +2060,7 @@ body:not(.light) .budget-alert-banner .backup-banner-btn { color: #ff9aa5; }
       </div>
       <div class="form-row">
         <label for="txAmount">סכום (₪)</label>
-        <input type="number" id="txAmount" step="0.01" min="0" required placeholder="0.00">
+        <input type="text" id="txAmount" inputmode="decimal" dir="ltr" required autocomplete="off" placeholder="0.00">
       </div>
       <div class="form-row">
         <label for="txDate">תאריך</label>
@@ -2530,6 +2530,11 @@ const RECEIPT_DB = 'kaspit_receipts_v1';
 const RECEIPT_STORE = 'receipts';
 
 function saveState() {
+  try {
+    if (window.kaspitCloud && typeof window.kaspitCloud.noteLocalEdit === 'function') window.kaspitCloud.noteLocalEdit();
+  } catch (err) {
+    console.error(err);
+  }
   const seq = ++saveSeq;
   saveChain = saveChain.then(() => persistState(seq)).catch((err) => {
     console.error('Save failed', err);
@@ -3075,6 +3080,14 @@ function r2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
+function parseMoneyInput(value) {
+  if (window.KaspitBalance && typeof window.KaspitBalance.parseMoney === 'function') {
+    return window.KaspitBalance.parseMoney(value);
+  }
+  const n = parseFloat(String(value == null ? '' : value).replace(/,/g, ''));
+  return Number.isFinite(n) ? r2(n) : NaN;
+}
+
 function monthLabel(key) {
   const [y, m] = key.split('-').map(Number);
   const d = new Date(y, m - 1, 1);
@@ -3533,7 +3546,7 @@ function renderBalanceCheckinCard() {
 function renderBalanceCheckinHistory() {
   const el = document.getElementById('balanceCheckinHistory');
   if (!el) return;
-  const checkins = [...(state.balanceCheckins || [])].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const checkins = [...(state.balanceCheckins || [])].filter(c => c && !c.deleted).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   if (checkins.length === 0) {
     el.innerHTML = '<p class="hint">אין עדיין רישומים.</p>';
     return;
@@ -3550,26 +3563,31 @@ function addBalanceCheckin(amount, date, accountId) {
   if (isNaN(amount)) { toast('נא להזין סכום תקין'); return; }
   const anchorDate = date || todayISO();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorDate)) { toast('תאריך לא תקין. השתמש בפורמט dd/mm/yyyy'); return; }
+  const now = Date.now();
   state.balanceCheckins.push({
     id: uid(),
     date: anchorDate,
     amount: Math.round(Number(amount) * 100) / 100,
-    createdAt: Date.now(),
+    createdAt: now,
+    updatedAt: now,
     accountId: accountId || 'all'
   });
   saveState();
   renderAll();
-  toast('היתרה עודכנה. מעכשיו היא תזוז עם ההכנסות וההוצאות.');
+  const live = computeCurrentBalanceEstimate('all');
+  toast(`היתרה עודכנה ל־${formatCurrency(live.amount)}. מעכשיו היא תזוז עם ההכנסות וההוצאות.`);
 }
 
 function deleteBalanceCheckin(id) {
-  const idx = state.balanceCheckins.findIndex(c => c.id === id);
-  if (idx === -1) return;
-  const [removed] = state.balanceCheckins.splice(idx, 1);
+  const item = (state.balanceCheckins || []).find(c => c.id === id && !c.deleted);
+  if (!item) return;
+  item.deleted = true;
+  item.updatedAt = Date.now();
   saveState();
   renderAll();
   showUndoToast('נקודת ההתחלה נמחקה', () => {
-    state.balanceCheckins.splice(idx, 0, removed);
+    item.deleted = false;
+    item.updatedAt = Date.now();
     saveState();
     renderAll();
   });
@@ -6099,8 +6117,7 @@ function addAccount() {
   state.accounts.push({ id: uid(), name });
   input.value = '';
   saveState();
-  renderAccountsList();
-  populateAccountFilter();
+  renderAll();
   toast('החשבון נוסף');
 }
 
@@ -6116,13 +6133,11 @@ function removeAccount(id) {
   const idx = state.accounts.findIndex(a => a.id === id);
   const [removed] = state.accounts.splice(idx, 1);
   saveState();
-  renderAccountsList();
-  populateAccountFilter();
+  renderAll();
   showUndoToast('החשבון נמחק', () => {
     state.accounts.splice(idx, 0, removed);
     saveState();
-    renderAccountsList();
-    populateAccountFilter();
+    renderAll();
   });
 }
 
@@ -7444,9 +7459,11 @@ function initEvents() {
     const type = currentTxType();
     const date = readDateInput('txDate');
     if (!date) { toast('תאריך לא תקין. השתמש בפורמט dd/mm/yyyy'); return; }
+    const amount = parseMoneyInput(document.getElementById('txAmount').value);
+    if (!Number.isFinite(amount) || amount < 0) { toast('נא להזין סכום תקין'); return; }
     const tx = {
       type,
-      amount: parseFloat(document.getElementById('txAmount').value),
+      amount,
       date,
       category: document.getElementById('txCategory').value,
       note: document.getElementById('txNote').value.trim(),
@@ -7493,7 +7510,8 @@ function initEvents() {
   document.getElementById('budgetForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const cat = document.getElementById('budgetCategory').value;
-    const amount = parseFloat(document.getElementById('budgetAmount').value);
+    const amount = parseMoneyInput(document.getElementById('budgetAmount').value);
+    if (!Number.isFinite(amount) || amount < 0) { toast('נא להזין סכום תקין'); return; }
     state.budgets[cat] = amount;
     saveState();
     closeModalOverlay('budgetModalOverlay');
@@ -7506,10 +7524,12 @@ function initEvents() {
     const id = document.getElementById('recurringId').value;
     const startDate = readDateInput('recurringStart');
     if (!startDate) { toast('תאריך התחלה לא תקין. השתמש בפורמט dd/mm/yyyy'); return; }
+    const amount = parseMoneyInput(document.getElementById('recurringAmount').value);
+    if (!Number.isFinite(amount) || amount < 0) { toast('נא להזין סכום תקין'); return; }
     const data = {
       name: document.getElementById('recurringName').value.trim(),
       type: currentRecurringType(),
-      amount: parseFloat(document.getElementById('recurringAmount').value),
+      amount,
       category: document.getElementById('recurringCategory').value,
       frequency: document.getElementById('recurringFrequency').value,
       startDate,
@@ -7577,7 +7597,7 @@ function initEvents() {
     e.preventDefault();
     const label = document.getElementById('quickAddLabel').value.trim();
     const category = document.getElementById('quickAddCategory').value;
-    const amount = parseFloat(document.getElementById('quickAddAmount').value);
+    const amount = parseMoneyInput(document.getElementById('quickAddAmount').value);
     if (!category) { toast('בחר קטגוריה'); return; }
     if (!(amount > 0)) { toast('נא להזין סכום תקין'); return; }
     state.quickAdds.push({
@@ -7679,7 +7699,7 @@ function initEvents() {
     const date = readDateInput('balanceCheckinDate') || todayISO();
     const accountEl = document.getElementById('balanceCheckinAccount');
     const accountId = accountEl && !accountEl.hidden ? (accountEl.value || 'all') : 'all';
-    addBalanceCheckin(parseFloat(input.value), date, accountId);
+    addBalanceCheckin(parseMoneyInput(input.value), date, accountId);
     input.value = '';
     writeDateInput('balanceCheckinDate', todayISO());
   });

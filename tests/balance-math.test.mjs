@@ -132,6 +132,28 @@ check('all-accounts anchor is not applied to a single account that has its own',
   assert.strictEqual(b.currentBalance(Object.assign({ accountId: 'all' }, shared)).amount, 4579.5);
 });
 
+check('a deleted starting balance is ignored', () => {
+  const result = b.currentBalance({
+    today,
+    accountId: 'all',
+    checkins: [
+      { id: 'old', date: '2026-11-19', amount: 1000, createdAt: 1000, accountId: 'all', deleted: true },
+      { id: 'keep', date: '2026-11-18', amount: 400.5, createdAt: 10, updatedAt: 10, accountId: 'all' }
+    ],
+    transactions: [{ id: 'e', type: 'expense', amount: 20, date: '2026-11-19', createdAt: 50 }]
+  });
+  assert.strictEqual(result.anchor.id, 'keep');
+  assert.strictEqual(result.amount, 380.5);
+});
+
+check('money typed with a comma still keeps agorot', () => {
+  assert.strictEqual(b.parseMoney('1,500.50'), 1500.5);
+  assert.strictEqual(b.parseMoney('1500,50'), 1500.5);
+  assert.strictEqual(b.parseMoney('1.500,50'), 1500.5);
+  assert.strictEqual(b.parseMoney('₪45.90'), 45.9);
+  assert.ok(Number.isNaN(b.parseMoney('')));
+});
+
 check('an account without its own anchor uses only that account\'s transactions', () => {
   const result = b.currentBalance({
     today,

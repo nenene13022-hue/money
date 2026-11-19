@@ -4,7 +4,7 @@
    Chart.js, SheetJS and Heebo are vendored under ./vendor and precached here so the app
    shell, charts, Excel export and Hebrew font work offline after the first successful load. */
 
-const CACHE_NAME = 'kaspit-cache-v6';
+const CACHE_NAME = 'kaspit-cache-v7';
 const PRECACHE = [
   './',
   './index.html',
@@ -79,8 +79,12 @@ self.addEventListener('fetch', (event) => {
   // The browser has to load it as a normal navigation so Firebase can read the result.
   if (isAuthCallback(url)) return;
 
-  // Always prefer a fresh Firebase config so a pasted key is picked up on refresh.
-  if (url.pathname.endsWith('/firebase-config.js')) {
+  // App logic must not stay stuck on a previous cache. The shell, the balance
+  // math and the sync code are checked on the network first, then cached.
+  if (url.pathname.endsWith('/firebase-config.js')
+    || url.pathname.endsWith('/firebase-sync.js')
+    || url.pathname.endsWith('/cloud-merge.js')
+    || url.pathname.endsWith('/balance-math.js')) {
     event.respondWith(
       fetch(request).then((response) => {
         if (response && response.status === 200) {

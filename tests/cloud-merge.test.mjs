@@ -196,6 +196,82 @@ check('redirect is only a fallback when the popup API itself is missing', () => 
   assert.strictEqual(merge.shouldFallbackToRedirect('auth/operation-not-supported-in-this-environment', chrome, { iPadOS: true }), false);
 });
 
+check('a stale snapshot does not drop a balance that was just saved', () => {
+  const local = {
+    categories: { income: ['משכורת'], expense: ['מזון'] },
+    budgets: { מזון: 100 },
+    accounts: [{ id: 'default', name: 'ראשי' }],
+    balanceCheckins: [{ id: 'now', date: '2026-11-19', amount: 5000.5, createdAt: 300, updatedAt: 300, accountId: 'all' }]
+  };
+  const remote = {
+    categories: { income: ['משכורת'], expense: ['מזון'] },
+    budgets: { מזון: 100 },
+    accounts: [{ id: 'default', name: 'ראשי' }],
+    balanceCheckins: [],
+    updatedAt: 100,
+    updatedBy: 'partner'
+  };
+  const decision = merge.reconcileShared({ local, remote, dirty: true, localStamp: 300, force: false });
+  assert.strictEqual(decision.shared.balanceCheckins.length, 1);
+  assert.strictEqual(decision.shared.balanceCheckins[0].amount, 5000.5);
+  assert.strictEqual(decision.dirty, true);
+  assert.strictEqual(decision.shared.budgets['מזון'], 100);
+});
+
+check('a newer household snapshot delivers the balance and asks for a redraw', () => {
+  const local = {
+    categories: { income: ['משכורת'], expense: ['מזון'] },
+    budgets: {},
+    balanceCheckins: []
+  };
+  const remote = {
+    categories: { income: ['משכורת'], expense: ['מזון'] },
+    budgets: {},
+    balanceCheckins: [{ id: 'now', date: '2026-11-19', amount: 8200.4, createdAt: 400, updatedAt: 400, accountId: 'all' }],
+    updatedAt: 400
+  };
+  const decision = merge.reconcileShared({ local, remote, dirty: false, localStamp: 100, force: false });
+  assert.strictEqual(decision.changed, true);
+  assert.strictEqual(decision.dirty, false);
+  assert.strictEqual(decision.shared.balanceCheckins[0].amount, 8200.4);
+});
+
+check('an older cloud copy does not erase a newer local starting balance', () => {
+  const local = {
+    balanceCheckins: [{ id: 'now', date: '2026-11-19', amount: 1500.25, createdAt: 500, updatedAt: 500, accountId: 'all' }]
+  };
+  const remote = {
+    balanceCheckins: [],
+    categories: { income: [], expense: ['מזון'] },
+    budgets: {},
+    updatedAt: 100
+  };
+  const decision = merge.reconcileShared({ local, remote, dirty: false, localStamp: 0, force: false });
+  assert.strictEqual(decision.shared.balanceCheckins[0].amount, 1500.25);
+  assert.strictEqual(decision.dirty, true);
+});
+
+check('a delete tombstone beats an older copy of the same balance', () => {
+  const merged = merge.mergeCheckins(
+    [{ id: 'now', date: '2026-11-19', amount: 10, updatedAt: 8, deleted: true }],
+    [{ id: 'now', date: '2026-11-19', amount: 10, updatedAt: 4 }]
+  );
+  assert.strictEqual(merged.length, 1);
+  assert.strictEqual(merged[0].deleted, true);
+});
+
+check('cloud transaction keeps createdAt so a same-day expense moves both balances', () => {
+  const cloud = merge.txForCloud({
+    id: 't', type: 'expense', amount: 20.4, category: 'מזון', date: '2026-11-19', note: '',
+    createdAt: 1500
+  }, { uid: 'u1', displayName: 'דן' });
+  assert.strictEqual(cloud.createdAt, 1500);
+  const without = merge.txForCloud({
+    id: 't2', type: 'expense', amount: 1, category: 'מזון', date: '2026-11-01', note: ''
+  }, { uid: 'u1' });
+  assert.strictEqual(without.createdAt, undefined);
+});
+
 check('cloud transaction does not include the receipt payload', () => {
   const cloud = merge.txForCloud({
     id: 't', type: 'expense', amount: 1, category: 'מזון', date: '2026-11-01', note: '',

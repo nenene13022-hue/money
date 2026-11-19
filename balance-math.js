@@ -28,8 +28,28 @@
     return acc === accountId;
   }
 
+  function parseMoney(value) {
+    let s = String(value == null ? '' : value).trim().replace(/[₪\u00a0\s]/g, '');
+    if (!s) return NaN;
+    s = s.replace(/[^\d,.\-]/g, '');
+    if (!s || s === '-' || s === '.' || s === ',') return NaN;
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma !== -1 && lastDot !== -1) {
+      if (lastComma > lastDot) s = s.replace(/\./g, '').replace(',', '.');
+      else s = s.replace(/,/g, '');
+    } else if (lastComma !== -1) {
+      const frac = s.slice(lastComma + 1);
+      if (frac.length > 0 && frac.length <= 2) s = s.slice(0, lastComma).replace(/,/g, '') + '.' + frac;
+      else s = s.replace(/,/g, '');
+    }
+    const n = Number(s);
+    if (!isFinite(n)) return NaN;
+    return round2(n);
+  }
+
   function latestAnchor(checkins, accountId) {
-    const list = (checkins || []).filter(c => anchorMatches(c, accountId));
+    const list = (checkins || []).filter(c => c && !c.deleted && anchorMatches(c, accountId));
     list.sort((a, b) => {
       const byDate = String(b.date).localeCompare(String(a.date));
       if (byDate) return byDate;
@@ -89,6 +109,7 @@
 
   return {
     round2,
+    parseMoney,
     signed,
     latestAnchor,
     isAfterAnchor,
