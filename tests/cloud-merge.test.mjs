@@ -173,6 +173,29 @@ check('replace keeps receipts for transactions that exist on both sides', () => 
   assert.strictEqual(out.find(t => t.id === 'local-only'), undefined);
 });
 
+check('iPhone Safari and Chrome do not fall back to redirect sign-in', () => {
+  const safari = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+  const crios = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/126.0.6478.54 Mobile/15E148 Safari/604.1';
+  assert.strictEqual(merge.browserBlocksRedirectSignIn(safari), true);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/popup-blocked', safari), false);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/operation-not-supported-in-this-environment', crios), false);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/popup-blocked', crios), false);
+});
+
+check('desktop Safari and Firefox do not use the broken redirect either', () => {
+  const safari = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15';
+  const firefox = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/operation-not-supported-in-this-environment', safari), false);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/popup-blocked', firefox), false);
+});
+
+check('redirect is only a fallback when the popup API itself is missing', () => {
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/popup-blocked', chrome), false);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/operation-not-supported-in-this-environment', chrome), true);
+  assert.strictEqual(merge.shouldFallbackToRedirect('auth/operation-not-supported-in-this-environment', chrome, { iPadOS: true }), false);
+});
+
 check('cloud transaction does not include the receipt payload', () => {
   const cloud = merge.txForCloud({
     id: 't', type: 'expense', amount: 1, category: 'מזון', date: '2026-11-01', note: '',
