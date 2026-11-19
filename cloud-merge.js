@@ -232,6 +232,25 @@
     };
   }
 
+  // Safari, every iOS browser (WebKit), and Firefox partition storage on
+  // kaspit-*.firebaseapp.com away from the GitHub Pages origin. signInWithRedirect
+  // then returns to the app with no user. Popup talks back via window.opener
+  // and does not need that third-party storage.
+  function browserBlocksRedirectSignIn(ua, extras) {
+    const s = String(ua || '');
+    if (/iPhone|iPad|iPod|CriOS|FxiOS|EdgiOS|OPiOS/.test(s)) return true;
+    if (extras && extras.iPadOS) return true;
+    const safari = /Safari\//.test(s) && !/Chrome\/|Chromium\/|Edg\/|OPR\/|CriOS|FxiOS|Android/.test(s);
+    if (safari) return true;
+    if (/Firefox\//.test(s)) return true;
+    return false;
+  }
+
+  function shouldFallbackToRedirect(errorCode, ua, extras) {
+    if (browserBlocksRedirectSignIn(ua, extras)) return false;
+    return errorCode === 'auth/operation-not-supported-in-this-environment';
+  }
+
   function recurringForCloud(item, user) {
     return {
       id: item.id,
@@ -263,6 +282,8 @@
     mergeById,
     mergeShared,
     sharedFromState,
-    recurringForCloud
+    recurringForCloud,
+    browserBlocksRedirectSignIn,
+    shouldFallbackToRedirect
   };
 });

@@ -4,7 +4,7 @@
    Chart.js, SheetJS and Heebo are vendored under ./vendor and precached here so the app
    shell, charts, Excel export and Hebrew font work offline after the first successful load. */
 
-const CACHE_NAME = 'kaspit-cache-v4';
+const CACHE_NAME = 'kaspit-cache-v5';
 const PRECACHE = [
   './',
   './index.html',
@@ -58,6 +58,14 @@ async function cacheFirstWithRefresh(request) {
   return cached || network;
 }
 
+function isAuthCallback(url) {
+  if (url.pathname.includes('/__/auth') || url.pathname.includes('/__/firebase')) return true;
+  const q = url.searchParams;
+  if (q.has('apiKey') && (q.has('state') || q.has('authType') || q.has('mode'))) return true;
+  if (q.has('code') && q.has('state')) return true;
+  return false;
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
@@ -65,6 +73,10 @@ self.addEventListener('fetch', (event) => {
   let url;
   try { url = new URL(request.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;
+
+  // Google's redirect back to this page must not be handled by the cache.
+  // The browser has to load it as a normal navigation so Firebase can read the result.
+  if (isAuthCallback(url)) return;
 
   // Always prefer a fresh Firebase config so a pasted key is picked up on refresh.
   if (url.pathname.endsWith('/firebase-config.js')) {

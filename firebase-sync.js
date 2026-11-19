@@ -32,7 +32,25 @@
     const fs = await import(SDK + '/firebase-firestore.js');
 
     const app = appMod.initializeApp(config);
-    const auth = authMod.getAuth(app);
+    const persistenceOptions = [
+      authMod.indexedDBLocalPersistence,
+      authMod.browserLocalPersistence,
+      authMod.browserSessionPersistence
+    ].filter((item, index, list) => item && list.indexOf(item) === index);
+    let auth;
+    try {
+      auth = authMod.initializeAuth(app, {
+        persistence: persistenceOptions,
+        popupRedirectResolver: authMod.browserPopupRedirectResolver
+      });
+    } catch (err) {
+      auth = authMod.getAuth(app);
+      try {
+        await authMod.setPersistence(auth, authMod.indexedDBLocalPersistence || authMod.browserLocalPersistence);
+      } catch (err2) {
+        console.error(err2);
+      }
+    }
     auth.languageCode = 'he';
     const provider = new authMod.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
@@ -72,6 +90,8 @@
     let fromCache = false;
     let hasPendingWrites = false;
     let wired = false;
+    let authError = '';
+    const REDIRECT_FLAG = 'kaspit_auth_redirect_pending';
 
     cloud._user = null;
     cloud._hid = null;
@@ -181,7 +201,8 @@
           <p class="hint">שני אנשים יכולים לנהל את אותו פנקס. כל תנועה שאחד מוסיף, עורך או מוחק מופיעה אצל השני. הכניסה היא עם חשבון Google.</p>
           <div class="btn-row">
             <button type="button" class="btn-primary" data-cloud-action="signin">כניסה עם Google</button>
-          </div>`;
+          </div>
+          ${authError ? `<p class="hint cloud-auth-error" role="alert">${esc(authError)}</p>` : ''}`;
         setStatus();
         return;
       }
@@ -278,40 +299,55 @@
       });
     }
 
-    async function signIn() {
+    function showAuthError(message) {
+      authError = message || '';
+      if (authError) toast(authError);
+      render();
+    }
+
+    function deviceExtras() {
+      let iPadOS = false;
       try {
-        if (preferRedirect()) {
-          await authMod.signInWithRedirect(auth, provider);
+        iPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      } catch (e) { /* ignore */ }
+      return { iPadOS };
+    }
+
+    async function signIn() {
+      authError = '';
+      try {
+        await authMod.signInWithPopup(auth, provider);
+        authError = '';
+        render();
+      } catch (err) {
+        const code = err && err.code;
+        if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+          showAuthError('חלון ההתחברות נסגר לפני שהחשבון חובר. נסו שוב.');
           return;
         }
-        await authMod.signInWithPopup(auth, provider);
-      } catch (err) {
-        if (err && (err.code === 'auth/popup-blocked' || err.code === 'auth/operation-not-supported-in-this-environment' || err.code === 'auth/cancelled-popup-request')) {
+        if (merge.shouldFallbackToRedirect(code, navigator.userAgent || '', deviceExtras())) {
           try {
+            sessionStorage.setItem(REDIRECT_FLAG, '1');
             await authMod.signInWithRedirect(auth, provider);
             return;
           } catch (err2) {
-            toast(authMessage(err2));
+            try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e) { /* ignore */ }
+            console.error(err2);
+            showAuthError(authMessage(err2));
             return;
           }
         }
-        if (err && err.code === 'auth/popup-closed-by-user') return;
         console.error(err);
-        toast(authMessage(err));
+        showAuthError(authMessage(err));
       }
-    }
-
-    function preferRedirect() {
-      const ua = navigator.userAgent || '';
-      const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-      return ios && standalone;
     }
 
     function authMessage(err) {
       const code = err && err.code;
       if (code === 'auth/unauthorized-domain') return 'הדומיין הזה לא מורשה ב-Firebase. צריך להוסיף את nenene13022-hue.github.io.';
-      if (code === 'auth/popup-blocked') return 'הדפדפן חסם את חלון ההתחברות.';
+      if (code === 'auth/popup-blocked') return 'הדפדפן חסם את חלון ההתחברות. אפשרו חלונות קופצים לאתר ונסו שוב.';
+      if (code === 'auth/operation-not-supported-in-this-environment') return 'הדפדפן הזה לא פותח חלון התחברות. נסו Safari או Chrome רגיל.';
+      if (code === 'auth/web-storage-unsupported') return 'הדפדפן חוסם שמירת התחברות. בטלו חסימת עוגיות לאתר ונסו שוב.';
       return 'ההתחברות נכשלה. נסו שוב.';
     }
 
@@ -728,16 +764,26 @@
 
     async function start() {
       wire();
+      let expectedRedirect = false;
+      try { expectedRedirect = sessionStorage.getItem(REDIRECT_FLAG) === '1'; } catch (e) { /* ignore */ }
       try {
         const redirected = await authMod.getRedirectResult(auth);
-        if (redirected && redirected.user) toast('התחברתם');
+        if (redirected && redirected.user) {
+          try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e) { /* ignore */ }
+          authError = '';
+        } else if (expectedRedirect && !(auth.currentUser)) {
+          try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e) { /* ignore */ }
+          authError = 'ההתחברות לא הושלמה. הדפדפן חוסם שמירה בין האתר לבין Google. נסו שוב — הכניסה נפתחת בחלון.';
+        }
       } catch (err) {
+        try { sessionStorage.removeItem(REDIRECT_FLAG); } catch (e) { /* ignore */ }
         console.error(err);
-        if (err && err.code !== 'auth/no-auth-event') toast(authMessage(err));
+        if (!err || err.code !== 'auth/no-auth-event') authError = authMessage(err);
       }
       authMod.onAuthStateChanged(auth, function (next) {
         user = next;
         cloud._user = next;
+        if (next) authError = '';
         if (!next) {
           unsubAll();
           householdId = null;
