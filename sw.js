@@ -4,7 +4,7 @@
    Chart.js, SheetJS and Heebo are vendored under ./vendor and precached here so the app
    shell, charts, Excel export and Hebrew font work offline after the first successful load. */
 
-const CACHE_NAME = 'kaspit-cache-v3';
+const CACHE_NAME = 'kaspit-cache-v4';
 const PRECACHE = [
   './',
   './index.html',
